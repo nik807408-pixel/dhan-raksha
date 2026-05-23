@@ -46,10 +46,11 @@ window.addEventListener('load', async () => {
     document.getElementById('splash').style.opacity = '0';
     setTimeout(() => {
       document.getElementById('splash').style.display = 'none';
-      session ? initApp(session.user) : showAuth();
+      // DEMO MODE — login skip, direct admin access
+      initDemoApp();
     }, 500);
   }, 2000);
-  db.auth.onAuthStateChange((_e, s) => { if (!s) showAuth(); });
+  // db.auth.onAuthStateChange removed for demo
 });
 
 function showAuth() {
@@ -119,6 +120,24 @@ async function manualRefresh() {
   await loadAll();
   showPage(currentPage);
   if (btn) { btn.disabled = false; btn.textContent = '🔄'; }
+}
+
+// ── DEMO MODE — no login required ────────
+async function initDemoApp() {
+  currentUser = { id: 'demo-admin', email: 'demo@dhanraksha.com' };
+  currentProfile = { id: 'demo-admin', name: 'Demo Admin', role: 'admin' };
+
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+
+  document.getElementById('uname').textContent = 'Demo';
+  const rp = document.getElementById('urole');
+  rp.textContent = 'Admin';
+  rp.className = 'role-pill role-admin';
+
+  await loadAll();
+  showPage('dashboard');
+  startAutoRefresh();
 }
 
 // ── APP INIT ─────────────────────────────
