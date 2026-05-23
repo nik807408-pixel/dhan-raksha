@@ -2,8 +2,8 @@
 //  CONFIGURATION — Replace with your Supabase values
 //  supabase.com → Project Settings → API
 // ─────────────────────────────────────────────────────────
-const SUPABASE_URL = 'https://YOUR_NEW_PROJECT.supabase.co'; // 👈 REPLACE WITH NEW SUPABASE URL
-const SUPABASE_KEY = 'YOUR_NEW_ANON_KEY'; // 👈 REPLACE WITH NEW SUPABASE ANON KEY
+const SUPABASE_URL = 'https://oswbpddfbofoyddxdfej.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zd2JwZGRmYm9mb3lkZHhkZmVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1MzA0NDUsImV4cCI6MjA5NTEwNjQ0NX0.Gem36jnT-m4I13k078tYxyxPfv_FLChfxgrMK4Kzk7o';
 // ─────────────────────────────────────────────────────────
 
 // ── HELPER FUNCTIONS ─────────────────────
@@ -3171,5 +3171,3 @@ async function reversePayment(paymentId, amount, type) {
     showToast('Reversal failed! Try again', 'error');
   }
 }
-
-
