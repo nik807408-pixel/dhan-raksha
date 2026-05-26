@@ -46,11 +46,10 @@ window.addEventListener('load', async () => {
     document.getElementById('splash').style.opacity = '0';
     setTimeout(() => {
       document.getElementById('splash').style.display = 'none';
-      // DEMO MODE — login skip, direct admin access
       initDemoApp();
     }, 500);
   }, 2000);
-  // db.auth.onAuthStateChange removed for demo
+  // demo mode - no auth
 });
 
 function showAuth() {
@@ -756,9 +755,9 @@ async function handleDocPhoto(input, type) {
     const reader = new FileReader();
     reader.onload = e => {
       // Handle different preview IDs
-      if (type === 'aadhaar-front') {
-        const img = document.getElementById('aadhaar-front-img');
-        const txt = document.getElementById('aadhaar-front-text');
+      if (type === 'aadhaar-front' || type === 'aadhaar') {
+        const img = document.getElementById('aadhaar-front-img') || document.getElementById('aadhaar-preview-img');
+        const txt = document.getElementById('aadhaar-front-text') || document.getElementById('aadhaar-preview-text');
         if (img) { img.src = e.target.result; img.style.display = 'block'; }
         if (txt) txt.style.display = 'none';
         aadhaarPhotoFile = compressed;
@@ -1191,7 +1190,7 @@ function renderEMICard(cl) {
   if (paidPct < 100) {
     const lastPay = payments[0];
     let nextDue = '';
-    let nextAmt = loanAmt > 0 ? Math.round((loanAmt + interest) / 12) : 0;
+    let nextAmt = loanAmt > 0 ? Math.round((loanAmt + interest) / (parseInt(cl.loan_weeks) || 12)) : 0;
     if (lastPay && lastPay.date) {
       const last = new Date(lastPay.date);
       last.setMonth(last.getMonth() + 1);
@@ -1763,9 +1762,9 @@ function renderMeetingTab() {
       const paid = allPayments.filter(p=>p.client_id===cl.id&&p.type==='credit').reduce((a,p)=>a+(parseFloat(p.amount)||0),0);
       return s + Math.max(0,(parseFloat(cl.balance)||0)+(parseFloat(cl.interest_amount)||0)-paid);
     }, 0);
-    const totalEMI = clients.reduce((s,cl) => s+Math.round(((parseFloat(cl.balance)||0)+(parseFloat(cl.interest_amount)||0))/12), 0);
-    const totalPDue = clients.reduce((s,cl) => s+Math.round((parseFloat(cl.balance)||0)/12), 0);
-    const totalIDue = clients.reduce((s,cl) => s+Math.round((parseFloat(cl.interest_amount)||0)/12), 0);
+    const totalEMI = clients.reduce((s,cl) => s+Math.round(((parseFloat(cl.balance)||0)+(parseFloat(cl.interest_amount)||0))/(parseInt(cl.loan_weeks)||12)), 0);
+    const totalPDue = clients.reduce((s,cl) => s+Math.round((parseFloat(cl.balance)||0)/(parseInt(cl.loan_weeks)||12)), 0);
+    const totalIDue = clients.reduce((s,cl) => s+Math.round((parseFloat(cl.interest_amount)||0)/(parseInt(cl.loan_weeks)||12)), 0);
 
     html += '<div style="margin-bottom:20px;border:1px solid #ccc;border-radius:8px;overflow:hidden;background:white">';
     
@@ -1837,11 +1836,12 @@ function renderMeetingTab() {
       const totalPaid = payments.reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
       const loanAmt = parseFloat(cl.balance)||0;
       const intAmt = parseFloat(cl.interest_amount)||0;
-      const outstandingP = Math.max(0, loanAmt - payments.length * Math.round(loanAmt/12));
-      const outstandingI = Math.max(0, intAmt - payments.length * Math.round(intAmt/12));
-      const pDue = Math.round(loanAmt/12);
-      const iDue = Math.round(intAmt/12);
-      const emi = pDue + iDue;
+      const outstandingP = Math.max(0, loanAmt - payments.length * Math.round(loanAmt/(parseInt(cl.loan_weeks)||12)));
+      const outstandingI = Math.max(0, intAmt - payments.length * Math.round(intAmt/(parseInt(cl.loan_weeks)||12)));
+      const _weeks = parseInt(cl.loan_weeks)||12;
+      const emi = Math.round((loanAmt + intAmt) / _weeks);
+      const pDue = Math.round(loanAmt / _weeks);
+      const iDue = emi - pDue;
       const instNo = payments.length;
       const dbDate = cl.loan_date || cl.first_emi_date || '—';
       const bg = i%2===0 ? 'white' : '#f9f9f9';
@@ -2545,7 +2545,7 @@ function showPassbook() {
           const loan = parseFloat(cl.balance)||0;
           const outstanding = Math.max(0, loan - totalPaid);
           return `
-          <div class="client-card passbook-client" data-id="${cl.id}" data-name="${cl.name.toLowerCase()}" onclick="showClientPassbook('${cl.id}')" ontouchend="event.preventDefault();showClientPassbook('${cl.id}')" style="margin-bottom:10px;cursor:pointer">
+          <div class="client-card passbook-client" data-id="${cl.id}" data-name="${cl.name.toLowerCase()}" onclick="showClientPassbook('${cl.id}')" ontouchstart="this._touchY=event.touches[0].clientY" ontouchend="if(Math.abs(event.changedTouches[0].clientY-this._touchY)<10){event.preventDefault();showClientPassbook('${cl.id}')}" style="margin-bottom:10px;cursor:pointer">
             <div class="client-avatar">${cl.name?.charAt(0).toUpperCase()}${cl.photo_url?`<img src="${cl.photo_url}" class="avatar-img"/>`:''}
             </div>
             <div class="client-info">
@@ -2587,7 +2587,7 @@ function showClientPassbook(clientId) {
   const totalWeeks = parseInt(cl.loan_weeks) || 12;
   const weeklyEMI = Math.round((loan + interest) / totalWeeks);
   const weeklyPrincipal = Math.round(loan / totalWeeks);
-  const weeklyInterest = Math.round(interest / totalWeeks);
+  const weeklyInterest = weeklyEMI - weeklyPrincipal;
   const totalDuePerWeek = cl.emi_amount || weeklyEMI;
 
   const c = document.getElementById('main-content');
@@ -2643,7 +2643,7 @@ function showClientPassbook(clientId) {
             const totalLoanPlusInterest = loan + interest;
             const weeklyEMI = Math.round(totalLoanPlusInterest / totalWeeks);
             const weeklyPrincipal = Math.round(loan / totalWeeks);
-            const weeklyInterest = Math.round(interest / totalWeeks);
+            const weeklyInterest = weeklyEMI - weeklyPrincipal;
 
             // Auto calculate weekly dates from first EMI date
             const startDate = cl.first_emi_date || cl.loan_date || new Date().toISOString().slice(0,10);
@@ -2788,20 +2788,21 @@ function printMeetingSheet() {
       const paid = allPayments.filter(p=>p.client_id===cl.id&&p.type==='credit').reduce((a,p)=>a+(parseFloat(p.amount)||0),0);
       return s + Math.max(0,(parseFloat(cl.balance)||0)+(parseFloat(cl.interest_amount)||0)-paid);
     }, 0);
-    const totalEMI = clients.reduce((s,cl) => s+Math.round(((parseFloat(cl.balance)||0)+(parseFloat(cl.interest_amount)||0))/12), 0);
-    const totalPDue = clients.reduce((s,cl) => s+Math.round((parseFloat(cl.balance)||0)/12), 0);
-    const totalIDue = clients.reduce((s,cl) => s+Math.round((parseFloat(cl.interest_amount)||0)/12), 0);
+    const totalEMI = clients.reduce((s,cl) => s+Math.round(((parseFloat(cl.balance)||0)+(parseFloat(cl.interest_amount)||0))/(parseInt(cl.loan_weeks)||12)), 0);
+    const totalPDue = clients.reduce((s,cl) => s+Math.round((parseFloat(cl.balance)||0)/(parseInt(cl.loan_weeks)||12)), 0);
+    const totalIDue = clients.reduce((s,cl) => s+Math.round((parseFloat(cl.interest_amount)||0)/(parseInt(cl.loan_weeks)||12)), 0);
 
     let rows = '';
     clients.forEach((cl, i) => {
       const payments = allPayments.filter(p=>p.client_id===cl.id&&p.type==='credit');
       const loanAmt = parseFloat(cl.balance)||0;
       const intAmt = parseFloat(cl.interest_amount)||0;
-      const outP = Math.max(0, loanAmt - payments.length * Math.round(loanAmt/12));
-      const outI = Math.max(0, intAmt - payments.length * Math.round(intAmt/12));
-      const pDue = Math.round(loanAmt/12);
-      const iDue = Math.round(intAmt/12);
-      const emi = pDue + iDue;
+      const outP = Math.max(0, loanAmt - payments.length * Math.round(loanAmt/(parseInt(cl.loan_weeks)||12)));
+      const outI = Math.max(0, intAmt - payments.length * Math.round(intAmt/(parseInt(cl.loan_weeks)||12)));
+      const _weeks = parseInt(cl.loan_weeks)||12;
+      const emi = Math.round((loanAmt + intAmt) / _weeks);
+      const pDue = Math.round(loanAmt / _weeks);
+      const iDue = emi - pDue;
       const bg = i%2===0 ? '#fff' : '#f9f9f9';
       rows += `<tr style="background:${bg}">
         <td>${cl.loan_id||cl.customer_id||'-'}</td>
@@ -3025,7 +3026,7 @@ function showMeetingDay() {
         const paid = allPayments.filter(p=>p.client_id===cl.id&&p.type==='credit').reduce((a,p)=>a+(parseFloat(p.amount)||0),0);
         return s + Math.max(0,(parseFloat(cl.balance)||0)+(parseFloat(cl.interest_amount)||0)-paid);
       }, 0);
-      const totalEMI = clients.reduce((s,cl) => s+Math.round(((parseFloat(cl.balance)||0)+(parseFloat(cl.interest_amount)||0))/12), 0);
+      const totalEMI = clients.reduce((s,cl) => s+Math.round(((parseFloat(cl.balance)||0)+(parseFloat(cl.interest_amount)||0))/(parseInt(cl.loan_weeks)||12)), 0);
 
       return `
         <div style="margin-bottom:20px" id="cds-${day.replace(/\s/g,'-')}">
@@ -3079,11 +3080,11 @@ function showMeetingDay() {
                     const intAmt = parseFloat(cl.interest_amount)||0;
                     const totalDue = loanAmt + intAmt;
                     const outstanding = Math.max(0, totalDue - totalPaid);
-                    const outstandingP = Math.max(0, loanAmt - payments.filter(p=>p.client_id===cl.id).length * Math.round(loanAmt/12));
-                    const outstandingI = Math.max(0, intAmt - payments.filter(p=>p.client_id===cl.id).length * Math.round(intAmt/12));
-                    const weeklyEMI = Math.round(totalDue/12);
-                    const weeklyP = Math.round(loanAmt/12);
-                    const weeklyI = Math.round(intAmt/12);
+                    const outstandingP = Math.max(0, loanAmt - payments.filter(p=>p.client_id===cl.id).length * Math.round(loanAmt/(parseInt(cl.loan_weeks)||12)));
+                    const outstandingI = Math.max(0, intAmt - payments.filter(p=>p.client_id===cl.id).length * Math.round(intAmt/(parseInt(cl.loan_weeks)||12)));
+                    const weeklyEMI = Math.round(totalDue/(parseInt(cl.loan_weeks)||12));
+                    const weeklyP = Math.round(loanAmt/(parseInt(cl.loan_weeks)||12));
+                    const weeklyI = Math.round(intAmt/(parseInt(cl.loan_weeks)||12));
                     const instNo = payments.length;
 
                     return `<tr style="background:${i%2===0?'white':'#f8fafc'};border-bottom:1px solid var(--border)">
