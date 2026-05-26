@@ -49,7 +49,7 @@ window.addEventListener('load', async () => {
       initDemoApp();
     }, 500);
   }, 2000);
-  // demo mode - no auth
+  // demo mode
 });
 
 function showAuth() {
@@ -762,8 +762,8 @@ async function handleDocPhoto(input, type) {
         if (txt) txt.style.display = 'none';
         aadhaarPhotoFile = compressed;
       } else if (type === 'aadhaar-back') {
-        const img = document.getElementById('aadhaar-back-img');
-        const txt = document.getElementById('aadhaar-back-text');
+        const img = document.getElementById('aadhaar-back-img') || document.getElementById('aadhaar-back-preview-img');
+        const txt = document.getElementById('aadhaar-back-text') || document.getElementById('aadhaar-back-preview-text');
         if (img) { img.src = e.target.result; img.style.display = 'block'; }
         if (txt) txt.style.display = 'none';
         aadhaarBackPhotoFile = compressed;
