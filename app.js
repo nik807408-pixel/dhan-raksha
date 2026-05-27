@@ -123,8 +123,8 @@ async function manualRefresh() {
 
 // ── DEMO MODE — no login required ────────
 async function initDemoApp() {
-  currentUser = { id: 'demo-admin', email: 'demo@dhanraksha.com' };
-  currentProfile = { id: 'demo-admin', name: 'Demo Admin', role: 'admin' };
+  currentUser = { id: null, email: 'demo@dhanraksha.com' };
+  currentProfile = { id: null, name: 'Demo Admin', role: 'admin' };
 
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
@@ -875,7 +875,7 @@ async function saveClient() {
   const loanId = v('f-loan-id') || (editingClientId ? null : 'LOAN-' + year + '-' + uniqueNum);
 
   const payload = {
-    name, assigned_to: assignTo, owner_id: currentUser.id,
+    name, assigned_to: assignTo || null, owner_id: currentUser.id || null,
     father_name: v('f-father'), mother_name: v('f-mother'),
     dob: v('f-dob') || null,
     client_type: document.getElementById('f-type').value,
@@ -1343,7 +1343,109 @@ function renderPassbookTab() {
 }
 
 
-// ── CASH BOOK ──────────────────────────────────────────────────────────────
+// ── LOAN RENEWAL ─────────────────────────────────────────────────────────
+function openRenewModal(clientId) {
+  const cl = allClients.find(c => c.id === clientId);
+  if (!cl) return;
+
+  // Auto next cycle
+  const cycleMap = {'1st':'2nd','2nd':'3rd','3rd':'4th','4th':'5th','5th':'6th','6th':'7th','7th':'8th','8th':'9th','9th':'10th'};
+  const nextCycle = cycleMap[cl.loan_cycle] || (parseInt(cl.loan_cycle)||1) + 1 + 'th';
+  const today = new Date().toISOString().slice(0,10);
+
+  const modal = document.createElement('div');
+  modal.id = 'renew-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:white;border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <div style="font-size:16px;font-weight:800;color:var(--navy)">🔄 Loan Renewal</div>
+          <div style="font-size:12px;color:var(--muted)">${cl.name} — ${cl.loan_cycle} → <strong>${nextCycle}</strong></div>
+        </div>
+        <button onclick="document.getElementById('renew-modal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button>
+      </div>
+
+      <div style="background:#fff8e1;border-radius:10px;padding:10px;margin-bottom:14px;font-size:12px;color:#856404">
+        ℹ️ KYC, Photo, Center — sab same rahega. Sirf loan details update honge.
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted)">Loan Amount ₹</label>
+          <input id="rn-balance" type="number" placeholder="0" value="${cl.balance||''}" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;margin-top:3px">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted)">Interest ₹</label>
+          <input id="rn-interest" type="number" placeholder="0" value="${cl.interest_amount||''}" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;margin-top:3px">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted)">Loan Weeks</label>
+          <select id="rn-weeks" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;margin-top:3px">
+            <option value="12" ${(cl.loan_weeks||12)==12?'selected':''}>12 Weeks</option>
+            <option value="16" ${cl.loan_weeks==16?'selected':''}>16 Weeks</option>
+            <option value="24" ${cl.loan_weeks==24?'selected':''}>24 Weeks</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted)">Loan Cycle</label>
+          <input id="rn-cycle" type="text" value="${nextCycle}" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;margin-top:3px">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted)">Loan Date</label>
+          <input id="rn-loan-date" type="date" value="${today}" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;margin-top:3px">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted)">First EMI Date</label>
+          <input id="rn-emi-date" type="date" value="${today}" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;margin-top:3px">
+        </div>
+      </div>
+
+      <button onclick="submitRenewal('${clientId}')" style="width:100%;padding:13px;background:linear-gradient(135deg,#e65c00,#f9d423);color:white;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">
+        🔄 Renew Loan / लोन नवीनीकरण करें
+      </button>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function submitRenewal(clientId) {
+  const balance  = parseFloat(document.getElementById('rn-balance')?.value) || 0;
+  const interest = parseFloat(document.getElementById('rn-interest')?.value) || 0;
+  const weeks    = parseInt(document.getElementById('rn-weeks')?.value) || 12;
+  const cycle    = document.getElementById('rn-cycle')?.value || '2nd';
+  const loanDate = document.getElementById('rn-loan-date')?.value || '';
+  const emiDate  = document.getElementById('rn-emi-date')?.value || '';
+
+  if (!balance) { showToast('Loan amount daalo!', 'error'); return; }
+
+  const weeklyEMI = Math.round((balance + interest) / weeks);
+
+  try {
+    const { error } = await db.from('clients').update({
+      balance,
+      interest_amount: interest,
+      loan_weeks: weeks,
+      loan_cycle: cycle,
+      loan_date: loanDate,
+      first_emi_date: emiDate,
+      emi_amount: weeklyEMI,
+      kyc_status: 'approved'
+    }).eq('id', clientId);
+
+    if (error) throw error;
+
+    document.getElementById('renew-modal')?.remove();
+    showToast(`✅ Loan Renewed! ${cycle} cycle — ₹${fmt(weeklyEMI)}/week`, 'success');
+    await loadAll();
+    showClientPassbook(clientId);
+
+  } catch(err) {
+    console.error('Renewal error:', err);
+    showToast('Renewal failed! Try again', 'error');
+  }
+}
+
+
 function renderCashBookTab() {
   const today = new Date().toISOString().slice(0,10);
   // Auto-fill opening balance from allPayments
@@ -2657,18 +2759,18 @@ function showClientPassbook(clientId) {
             let runningOutstanding = totalLoanPlusInterest;
             
             payments.forEach((p, i) => {
-              const isReversal = p.type === 'debit' && (p.description||'').includes('Reversal');
+              const isReversal = (p.description||'').includes('Reversal');
               const amount = parseFloat(p.amount) || 0;
 
               if (isReversal) {
-                // Reversal: outstanding WAPAS BADHE
-                runningOutstanding = Math.min(totalLoanPlusInterest, runningOutstanding + amount);
+                // Reversal row — debit reversal: outstanding badhta hai
+                if (p.type === 'debit') runningOutstanding = Math.min(totalLoanPlusInterest, runningOutstanding + amount);
                 rows.push(`
                 <tr style="background:#fff5f5;border-bottom:1px solid var(--border)">
                   <td style="padding:6px 8px;text-align:center;color:var(--muted);border-right:1px solid var(--border)">${p.date||'—'}</td>
                   <td style="padding:6px 8px;text-align:center;font-weight:700;color:var(--danger);border-right:1px solid var(--border)">↩️</td>
-                  <td style="padding:6px 8px;text-align:center;color:var(--danger);border-right:1px solid var(--border)" colspan="3">↩️ Reversal Entry</td>
-                  <td style="padding:6px 8px;text-align:right;color:var(--danger);font-weight:700;border-right:1px solid var(--border)">-₹${fmt(amount)}</td>
+                  <td colspan="3" style="padding:6px 8px;text-align:center;color:var(--danger);font-weight:600;border-right:1px solid var(--border)">↩️ Reversal Entry</td>
+                  <td style="padding:6px 8px;text-align:right;color:var(--danger);font-weight:700;border-right:1px solid var(--border)">—</td>
                   <td style="padding:6px 8px;text-align:right;color:var(--danger);font-weight:700;border-right:1px solid var(--border)">₹${fmt(runningOutstanding)}</td>
                   <td style="padding:6px 8px;text-align:center;border-right:1px solid var(--border)">❌</td>
                   <td style="padding:6px 8px;border-right:1px solid var(--border)"></td>
@@ -2719,8 +2821,16 @@ function showClientPassbook(clientId) {
         <tfoot>
           <tr style="background:#f0f4f8;font-weight:700;border-top:2px solid var(--navy)">
             <td colspan="5" style="padding:8px 10px;color:var(--navy)">कुल / Total</td>
-            <td style="padding:8px 10px;text-align:right;color:var(--success)">₹${fmt(payments.filter(p=>p.type==='credit').reduce((s,p)=>s+(parseFloat(p.amount)||0),0))}</td>
-            <td style="padding:8px 10px;text-align:right;color:var(--danger)">₹${fmt(Math.max(0,(loan+interest)-payments.filter(p=>p.type==='credit').reduce((s,p)=>s+(parseFloat(p.amount)||0),0)+payments.filter(p=>p.type==='debit').reduce((s,p)=>s+(parseFloat(p.amount)||0),0)))}</td>
+            <td style="padding:8px 10px;text-align:right;color:var(--success)">₹${fmt(Math.max(0,
+              payments.filter(p=>p.type==='credit'&&!(p.description||'').includes('Reversal')).reduce((s,p)=>s+(parseFloat(p.amount)||0),0) -
+              payments.filter(p=>p.type==='debit'&&(p.description||'').includes('Reversal')).reduce((s,p)=>s+(parseFloat(p.amount)||0),0)
+            ))}</td>
+            <td style="padding:8px 10px;text-align:right;color:var(--danger)">₹${fmt(Math.max(0,
+              (loan+interest) - Math.max(0,
+                payments.filter(p=>p.type==='credit'&&!(p.description||'').includes('Reversal')).reduce((s,p)=>s+(parseFloat(p.amount)||0),0) -
+                payments.filter(p=>p.type==='debit'&&(p.description||'').includes('Reversal')).reduce((s,p)=>s+(parseFloat(p.amount)||0),0)
+              )
+            ))}</td>
             <td colspan="3"></td>
           </tr>
         </tfoot>
@@ -2729,6 +2839,9 @@ function showClientPassbook(clientId) {
 
     <!-- Add Payment Button -->
     <button onclick="activeClientId='${clientId}';openPayModal()" style="width:100%;padding:12px;background:var(--navy);color:white;border:none;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;margin-top:12px">+ किस्त जोड़ें / Add Payment</button>
+
+    <!-- Renew Loan Button -->
+    <button onclick="openRenewModal('${clientId}')" style="width:100%;padding:12px;background:linear-gradient(135deg,#e65c00,#f9d423);color:white;border:none;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;margin-top:8px">🔄 Loan Renew करें / Renew Loan</button>
 
     <!-- टिप्पणी -->
     <div style="background:white;border-radius:12px;padding:14px;margin-top:12px;border:1px solid var(--border)">
