@@ -258,9 +258,16 @@ function renderDashboard(c) {
     </div>
 
     <div class="chart-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <div class="chart-title" style="margin:0">💰 Payment History / भुगतान इतिहास</div>
         <button onclick="exportPaymentsExcel()" style="background:var(--success);color:white;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer">📥 Export Excel</button>
+      </div>
+      <!-- Client Filter -->
+      <div style="margin-bottom:10px;display:flex;gap:8px;align-items:center">
+        <select id="ph-client-filter" onchange="renderDashboard()" style="flex:1;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12px;color:var(--navy)">
+          <option value="">-- सभी Clients / All Clients --</option>
+          ${allClients.map(cl=>`<option value="${cl.id}">${cl.name}</option>`).join('')}
+        </select>
       </div>
       ${!allPayments || allPayments.length === 0 ? '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No payments yet / कोई भुगतान नहीं<br><span style="font-size:11px">Client पर click करके payment add करें</span></div>' :
       `<div style="overflow-x:auto">
@@ -277,13 +284,18 @@ function renderDashboard(c) {
           </thead>
           <tbody>
             ${(() => {
-              // Calculate running outstanding per client
+              const filterClientId = document.getElementById('ph-client-filter')?.value || '';
+              const filtered = filterClientId
+                ? allPayments.filter(p => p.client_id === filterClientId)
+                : allPayments;
               const clientOutstanding = {};
-              allClients.forEach(cl => { clientOutstanding[cl.id] = parseFloat(cl.balance)||0; });
-              return allPayments.slice(0,10).map((p,i) => {
+              allClients.forEach(cl => { clientOutstanding[cl.id] = (parseFloat(cl.balance)||0) + (parseFloat(cl.interest_amount)||0); });
+              return filtered.slice(0,50).map((p,i) => {
                 const client = allClients.find(c => c.id === p.client_id);
-                if (p.type === 'credit' && client) {
+                if (p.type === 'credit' && !(p.description||'').includes('Reversal') && client) {
                   clientOutstanding[p.client_id] = Math.max(0, (clientOutstanding[p.client_id]||0) - (parseFloat(p.amount)||0));
+                } else if (p.type === 'debit' && (p.description||'').includes('Reversal') && client) {
+                  clientOutstanding[p.client_id] = Math.min((parseFloat(client.balance)||0)+(parseFloat(client.interest_amount)||0), (clientOutstanding[p.client_id]||0) + (parseFloat(p.amount)||0));
                 }
                 const outstanding = clientOutstanding[p.client_id] || 0;
                 return `<tr style="background:${i%2===0?'white':'#f8fafc'};border-bottom:1px solid var(--border)">
@@ -300,7 +312,7 @@ function renderDashboard(c) {
             })()}
           </tbody>
         </table>
-        ${allPayments.length > 10 ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted)">Showing 10 of ${allPayments.length} payments</div>` : ''}
+        ${allPayments.length > 50 ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted)">Showing 50 of ${allPayments.length} payments</div>` : ''}
       </div>`}
     </div>
 
