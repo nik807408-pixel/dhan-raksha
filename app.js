@@ -1871,14 +1871,25 @@ function renderMeetingTab() {
 
     const dayShort = day.split('/')[0].trim();
     const isToday = dayName === dayShort;
-    const totalLoan = clients.reduce((s,cl) => s+(parseFloat(cl.balance)||0), 0);
-    const totalOutstanding = clients.reduce((s,cl) => {
-      const paid = allPayments.filter(p=>p.client_id===cl.id&&p.type==='credit').reduce((a,p)=>a+(parseFloat(p.amount)||0),0);
-      return s + Math.max(0,(parseFloat(cl.balance)||0)+(parseFloat(cl.interest_amount)||0)-paid);
-    }, 0);
-    const totalEMI = clients.reduce((s,cl) => s+Math.round(((parseFloat(cl.balance)||0)+(parseFloat(cl.interest_amount)||0))/(parseInt(cl.loan_weeks)||12)), 0);
-    const totalPDue = clients.reduce((s,cl) => s+Math.round((parseFloat(cl.balance)||0)/(parseInt(cl.loan_weeks)||12)), 0);
-    const totalIDue = clients.reduce((s,cl) => s+Math.round((parseFloat(cl.interest_amount)||0)/(parseInt(cl.loan_weeks)||12)), 0);
+
+    // Group by center
+    const centerMap = {};
+    clients.forEach(cl => {
+      const key = cl.center_name || 'Unknown Center';
+      if (!centerMap[key]) centerMap[key] = [];
+      centerMap[key].push(cl);
+    });
+
+    Object.entries(centerMap).forEach(([centerName, centerClients]) => {
+      const totalLoan = centerClients.reduce((s,cl) => s+(parseFloat(cl.balance)||0), 0);
+      const totalOutstanding = centerClients.reduce((s,cl) => {
+        const paid = allPayments.filter(p=>p.client_id===cl.id&&p.type==='credit'&&!(p.description||'').includes('Reversal')).reduce((a,p)=>a+(parseFloat(p.amount)||0),0);
+        const reverted = allPayments.filter(p=>p.client_id===cl.id&&p.type==='debit'&&(p.description||'').includes('Reversal')).reduce((a,p)=>a+(parseFloat(p.amount)||0),0);
+        return s + Math.max(0,(parseFloat(cl.balance)||0)+(parseFloat(cl.interest_amount)||0)-paid+reverted);
+      }, 0);
+      const totalEMI = centerClients.reduce((s,cl) => s+Math.round(((parseFloat(cl.balance)||0)+(parseFloat(cl.interest_amount)||0))/(parseInt(cl.loan_weeks)||12)), 0);
+      const totalPDue = centerClients.reduce((s,cl) => s+Math.round((parseFloat(cl.balance)||0)/(parseInt(cl.loan_weeks)||12)), 0);
+      const totalIDue = centerClients.reduce((s,cl) => s+Math.round((parseFloat(cl.interest_amount)||0)/(parseInt(cl.loan_weeks)||12)), 0);
 
     html += '<div style="margin-bottom:20px;border:1px solid #ccc;border-radius:8px;overflow:hidden;background:white">';
     
@@ -1891,7 +1902,7 @@ function renderMeetingTab() {
     // Center Info - Row 1
     html += '<table style="width:100%;border-collapse:collapse;font-size:11px">';
     html += '<tr>';
-    html += '<td style="border:1px solid #ccc;padding:5px;width:33%"><strong>'+clients[0]?.center_name+' / '+clients[0]?.center_code+'</strong></td>';
+    html += '<td style="border:1px solid #ccc;padding:5px;width:33%"><strong>'+centerName+' / '+(centerClients[0]?.center_code||'')+'</strong></td>';
     html += '<td style="border:1px solid #ccc;padding:5px;width:34%;text-align:center"><strong>'+day+'</strong>'+(isToday?' ⭐ TODAY':'')+'</td>';
     html += '<td style="border:1px solid #ccc;padding:5px;width:33%">'+day.split('/')[0].trim().toUpperCase()+'</td>';
     html += '</tr>';
@@ -1905,14 +1916,14 @@ function renderMeetingTab() {
     
     // Row 3
     html += '<tr>';
-    html += '<td style="border:1px solid #ccc;padding:5px">L.C.: <strong>'+(clients[0]?.loan_cycle||'—')+'</strong></td>';
-    html += '<td style="border:1px solid #ccc;padding:5px;text-align:center">Members: <strong>'+clients.length+'</strong></td>';
+    html += '<td style="border:1px solid #ccc;padding:5px">L.C.: <strong>'+(centerClients[0]?.loan_cycle||'—')+'</strong></td>';
+    html += '<td style="border:1px solid #ccc;padding:5px;text-align:center">Members: <strong>'+centerClients.length+'</strong></td>';
     html += '<td style="border:1px solid #ccc;padding:5px">T.Outstanding: <strong style="color:red">₹'+fmt(totalOutstanding)+'</strong></td>';
     html += '</tr>';
     
     // Row 4
     html += '<tr>';
-    html += '<td style="border:1px solid #ccc;padding:5px">Center ID: <strong>'+(clients[0]?.center_code||'—')+'</strong></td>';
+    html += '<td style="border:1px solid #ccc;padding:5px">Center ID: <strong>'+(centerClients[0]?.center_code||'—')+'</strong></td>';
     html += '<td style="border:1px solid #ccc;padding:5px">Receipt No: </td>';
     html += '<td style="border:1px solid #ccc;padding:5px">Staff: <strong>'+currentProfile?.name+'</strong></td>';
     html += '</tr>';
@@ -2018,7 +2029,8 @@ function renderMeetingTab() {
     html += '</div>';
     
     html += '</div>'; // end card
-  });
+    }); // end centerMap forEach
+  }); // end days forEach
 
   if (!html) return emptyState('🏘️','No meeting scheduled<br>Client में Meeting Day set करें');
   return html;
@@ -2908,17 +2920,28 @@ function printMeetingSheet() {
     if (!clients.length) return;
 
     const dayShort = day.split('/')[0].trim();
-    const totalLoan = clients.reduce((s,cl) => s+(parseFloat(cl.balance)||0), 0);
-    const totalOutstanding = clients.reduce((s,cl) => {
-      const paid = allPayments.filter(p=>p.client_id===cl.id&&p.type==='credit').reduce((a,p)=>a+(parseFloat(p.amount)||0),0);
-      return s + Math.max(0,(parseFloat(cl.balance)||0)+(parseFloat(cl.interest_amount)||0)-paid);
+
+    // Group by center
+    const centerMap = {};
+    clients.forEach(cl => {
+      const key = cl.center_name || 'Unknown Center';
+      if (!centerMap[key]) centerMap[key] = [];
+      centerMap[key].push(cl);
+    });
+
+    Object.entries(centerMap).forEach(([centerName, centerClients]) => {
+    const totalLoan = centerClients.reduce((s,cl) => s+(parseFloat(cl.balance)||0), 0);
+    const totalOutstanding = centerClients.reduce((s,cl) => {
+      const paid = allPayments.filter(p=>p.client_id===cl.id&&p.type==='credit'&&!(p.description||'').includes('Reversal')).reduce((a,p)=>a+(parseFloat(p.amount)||0),0);
+      const rev = allPayments.filter(p=>p.client_id===cl.id&&p.type==='debit'&&(p.description||'').includes('Reversal')).reduce((a,p)=>a+(parseFloat(p.amount)||0),0);
+      return s + Math.max(0,(parseFloat(cl.balance)||0)+(parseFloat(cl.interest_amount)||0)-paid+rev);
     }, 0);
-    const totalEMI = clients.reduce((s,cl) => s+Math.round(((parseFloat(cl.balance)||0)+(parseFloat(cl.interest_amount)||0))/(parseInt(cl.loan_weeks)||12)), 0);
-    const totalPDue = clients.reduce((s,cl) => s+Math.round((parseFloat(cl.balance)||0)/(parseInt(cl.loan_weeks)||12)), 0);
-    const totalIDue = clients.reduce((s,cl) => s+Math.round((parseFloat(cl.interest_amount)||0)/(parseInt(cl.loan_weeks)||12)), 0);
+    const totalEMI = centerClients.reduce((s,cl) => s+Math.round(((parseFloat(cl.balance)||0)+(parseFloat(cl.interest_amount)||0))/(parseInt(cl.loan_weeks)||12)), 0);
+    const totalPDue = centerClients.reduce((s,cl) => s+Math.round((parseFloat(cl.balance)||0)/(parseInt(cl.loan_weeks)||12)), 0);
+    const totalIDue = centerClients.reduce((s,cl) => s+Math.round((parseFloat(cl.interest_amount)||0)/(parseInt(cl.loan_weeks)||12)), 0);
 
     let rows = '';
-    clients.forEach((cl, i) => {
+    centerClients.forEach((cl, i) => {
       const payments = allPayments.filter(p=>p.client_id===cl.id&&p.type==='credit');
       const loanAmt = parseFloat(cl.balance)||0;
       const intAmt = parseFloat(cl.interest_amount)||0;
@@ -2953,7 +2976,7 @@ function printMeetingSheet() {
       </div>
       <table class="info-table">
         <tr>
-          <td style="width:33%">${clients[0]?.center_name||''} / ${clients[0]?.center_code||''}</td>
+          <td style="width:33%">${centerClients[0]?.center_name||''} / ${centerClients[0]?.center_code||''}</td>
           <td style="width:34%;text-align:center"><b>${day}</b></td>
           <td style="width:33%">${dayShort.toUpperCase()}</td>
         </tr>
@@ -2963,12 +2986,12 @@ function printMeetingSheet() {
           <td>Time: <b>9:00 AM</b></td>
         </tr>
         <tr>
-          <td>L.C.: <b>${clients[0]?.loan_cycle||'-'}</b></td>
+          <td>L.C.: <b>${centerClients[0]?.loan_cycle||'-'}</b></td>
           <td style="text-align:center">Members: <b>${clients.length}</b></td>
           <td>T.Outstanding: <b style="color:red">₹${fmt(totalOutstanding)}</b></td>
         </tr>
         <tr>
-          <td>Center ID: <b>${clients[0]?.center_code||'-'}</b></td>
+          <td>Center ID: <b>${centerClients[0]?.center_code||'-'}</b></td>
           <td>Receipt No:</td>
           <td>Staff: <b>${currentProfile?.name||'Admin'}</b></td>
         </tr>
@@ -3037,7 +3060,8 @@ function printMeetingSheet() {
         </tr>
       </table>
     </div>`;
-  });
+    }); // end centerMap forEach
+  }); // end days forEach
 
   if (!pagesHtml) { showToast('कोई meeting scheduled नहीं!', 'error'); return; }
 
@@ -3166,11 +3190,11 @@ function showMeetingDay() {
 
             <!-- Center Info Grid -->
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;margin-bottom:10px;background:#f8fafc;padding:10px;border-radius:8px">
-              <div><strong>Center:</strong> ${clients[0]?.center_name||'—'}</div>
+              <div><strong>Center:</strong> ${centerClients[0]?.center_name||'—'}</div>
               <div><strong>CDS Date:</strong> ${todayStr}</div>
-              <div><strong>L.C.:</strong> ${clients[0]?.loan_cycle||'—'}</div>
+              <div><strong>L.C.:</strong> ${centerClients[0]?.loan_cycle||'—'}</div>
               <div><strong>Day:</strong> ${dayShort} ${isToday?'⭐ TODAY':''}</div>
-              <div><strong>Center ID:</strong> ${clients[0]?.center_code||'—'}</div>
+              <div><strong>Center ID:</strong> ${centerClients[0]?.center_code||'—'}</div>
               <div><strong>Members:</strong> ${clients.length}</div>
               <div><strong>Time:</strong> 9:00 AM</div>
               <div><strong>T.Outstanding:</strong> <span style="color:var(--danger);font-weight:700">₹${fmt(totalOutstanding)}</span></div>
