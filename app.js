@@ -265,7 +265,7 @@ function renderDashboard(c) {
       <!-- Client Search -->
       <div style="margin-bottom:10px;display:flex;gap:8px;align-items:center">
         <input type="text" id="ph-client-search" placeholder="🔍 Client name search करें..." 
-          oninput="renderDashboard()"
+          oninput="filterPaymentHistory(this.value)"
           style="flex:1;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12px;color:var(--navy)">
       </div>
       ${!allPayments || allPayments.length === 0 ? '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No payments yet / कोई भुगतान नहीं<br><span style="font-size:11px">Client पर click करके payment add करें</span></div>' :
@@ -281,17 +281,11 @@ function renderDashboard(c) {
               <th style="padding:8px 10px;text-align:center;white-space:nowrap">✓</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody id="ph-table-body">
             ${(() => {
-              const searchQ = (document.getElementById('ph-client-search')?.value || '').toLowerCase().trim();
               const clientOutstanding = {};
               allClients.forEach(cl => { clientOutstanding[cl.id] = (parseFloat(cl.balance)||0) + (parseFloat(cl.interest_amount)||0); });
-              const filtered = searchQ
-                ? allPayments.filter(p => {
-                    const cl = allClients.find(c => c.id === p.client_id);
-                    return cl && cl.name.toLowerCase().includes(searchQ);
-                  })
-                : allPayments;
+              const filtered = allPayments;
               return filtered.slice(0,50).map((p,i) => {
                 const client = allClients.find(c => c.id === p.client_id);
                 if (p.type === 'credit' && !(p.description||'').includes('Reversal') && client) {
@@ -300,7 +294,7 @@ function renderDashboard(c) {
                   clientOutstanding[p.client_id] = Math.min((parseFloat(client.balance)||0)+(parseFloat(client.interest_amount)||0), (clientOutstanding[p.client_id]||0) + (parseFloat(p.amount)||0));
                 }
                 const outstanding = clientOutstanding[p.client_id] || 0;
-                return `<tr style="background:${i%2===0?'white':'#f8fafc'};border-bottom:1px solid var(--border)">
+                return `<tr data-client="${client?.name||''}" data-phone="${client?.phone||''}" style="background:${i%2===0?'white':'#f8fafc'};border-bottom:1px solid var(--border)">
                   <td style="padding:7px 10px;white-space:nowrap;color:var(--muted);font-size:11px">${p.date||'—'}</td>
                   <td style="padding:7px 10px;font-weight:600;color:var(--navy);font-size:12px">${client?.name||'?'}</td>
                   <td style="padding:7px 10px;color:var(--muted);font-size:11px">${p.description||'Cash'}</td>
@@ -1357,7 +1351,21 @@ function renderPassbookTab() {
 }
 
 
-// ── LOAN RENEWAL ─────────────────────────────────────────────────────────
+function filterPaymentHistory(searchQ) {
+  const q = (searchQ || '').toLowerCase().trim();
+  const rows = document.querySelectorAll('#ph-table-body tr');
+  rows.forEach(row => {
+    const clientName = row.dataset.client || '';
+    const phone = row.dataset.phone || '';
+    if (!q || clientName.toLowerCase().includes(q) || phone.includes(q)) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
+}
+
+
 function openRenewModal(clientId) {
   const cl = allClients.find(c => c.id === clientId);
   if (!cl) return;
