@@ -288,7 +288,7 @@ function renderDashboard(c) {
               const filtered = allPayments;
               return filtered.slice(0,50).map((p,i) => {
                 const client = allClients.find(c => c.id === p.client_id);
-                if (p.type === 'credit' && !(p.description||'').includes('Reversal') && client) {
+                if (p.type === 'credit' && !(p.description||'').includes('Reversal') && !(p.description||'').includes('DELETED') && client) {
                   clientOutstanding[p.client_id] = Math.max(0, (clientOutstanding[p.client_id]||0) - (parseFloat(p.amount)||0));
                 } else if (p.type === 'debit' && (p.description||'').includes('Reversal') && client) {
                   clientOutstanding[p.client_id] = Math.min((parseFloat(client.balance)||0)+(parseFloat(client.interest_amount)||0), (clientOutstanding[p.client_id]||0) + (parseFloat(p.amount)||0));
@@ -1070,21 +1070,24 @@ async function openDetail(id) {
 
     <div class="detail-section">
       <div class="detail-section-title">💰 Payments / भुगतान (${payments.length})</div>
-      ${payments.length ? payments.slice(0,5).map(p => `
-        <div class="payment-item">
-          <div class="pay-icon ${p.type==='credit'?'pay-in':'pay-out'}">${p.type==='credit'?'✅':'❌'}</div>
+      ${payments.length ? payments.slice(0,5).map(p => {
+        const isDeleted = (p.description||'').includes('🗑️ DELETED');
+        return `
+        <div class="payment-item" style="${isDeleted ? 'opacity:0.5;background:#fef2f2;border-radius:8px;' : ''}">
+          <div class="pay-icon ${p.type==='credit'?'pay-in':'pay-out'}">${isDeleted ? '🗑️' : p.type==='credit'?'✅':'❌'}</div>
           <div class="pay-info">
-            <div class="pay-desc">${p.description||'Cash'} <span style="font-size:10px;color:var(--muted);font-weight:400">(pay mode)</span></div>
+            <div class="pay-desc" style="${isDeleted ? 'text-decoration:line-through;color:var(--muted)' : ''}">${p.description||'Cash'} <span style="font-size:10px;color:var(--muted);font-weight:400">(pay mode)</span></div>
             <div class="pay-date">${p.date||''}</div>
           </div>
-          <div class="pay-amount" style="color:${p.type==='credit'?'var(--success)':'var(--danger)'}">
+          <div class="pay-amount" style="color:${isDeleted ? 'var(--muted)' : p.type==='credit'?'var(--success)':'var(--danger)'};${isDeleted?'text-decoration:line-through':''}">
             ${p.type==='credit'?'+':'-'}₹${fmt(parseFloat(p.amount)||0)}
           </div>
-          ${currentProfile?.role === 'admin' ? `
-          <button onclick="reversePayment('${p.id}','${p.amount}','${p.type}')" 
-            style="margin-left:6px;padding:4px 8px;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;color:#856404;white-space:nowrap"
-            title="Reverse this payment">↩️ Reverse</button>` : ''}
-        </div>`).join('') : '<div style="color:var(--muted);font-size:13px;text-align:center;padding:10px">No payments yet</div>'}
+          ${currentProfile?.role === 'admin' && !isDeleted ? `
+          <button onclick="deletePayment('${p.id}')" 
+            style="margin-left:6px;padding:4px 8px;background:#fee2e2;border:1px solid #fca5a5;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;color:#dc2626;white-space:nowrap"
+            title="Delete this payment">🗑️ Delete</button>` : ''}
+        </div>`;
+      }).join('') : '<div style="color:var(--muted);font-size:13px;text-align:center;padding:10px">No payments yet</div>'}
       <button class="pay-add-btn" onclick="openPayModal()">+ Add Payment / भुगतान जोड़ें</button>
     </div>
 
@@ -2380,7 +2383,7 @@ function showNPAReport() {
 
     // Real payments (reversal exclude)
     const realPaid = allPayments
-      .filter(p => p.client_id === c.id && p.type === 'credit' && !(p.description||'').includes('Reversal'))
+      .filter(p => p.client_id === c.id && p.type === 'credit' && !(p.description||'').includes('Reversal') && !(p.description||'').includes('DELETED'))
       .reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
     const debitReversals = allPayments
       .filter(p => p.client_id === c.id && p.type === 'debit' && (p.description||'').includes('Reversal'))
@@ -3395,39 +3398,34 @@ function showMeetingDay() {
   `;
 }
 // ── REVERSE PAYMENT (Admin only) ──────────
-async function reversePayment(paymentId, amount, type) {
+async function deletePayment(paymentId) {
   if (currentProfile?.role !== 'admin') {
     showToast('Admin only! / सिर्फ Admin', 'error');
     return;
   }
 
-  const reason = prompt('Reversal का कारण बताएं:\n(Reason for reversal)', 'Wrong entry reversed');
-  if (!reason) return;
+  const confirmed = confirm('क्या आप इस payment को delete करना चाहते हैं?\n(Payment history में दिखेगी लेकिन balance में count नहीं होगी)');
+  if (!confirmed) return;
 
   try {
-    // Create reverse entry (opposite type)
-    const reverseType = type === 'credit' ? 'debit' : 'credit';
-    const today = new Date().toISOString().slice(0,10);
+    const p = allPayments.find(x => x.id === paymentId);
+    if (!p) return;
 
-    const { data, error } = await db.from('payments').insert({
-      client_id: allPayments.find(p => p.id === paymentId)?.client_id,
-      amount: parseFloat(amount),
-      type: reverseType,
-      description: '↩️ Reversal: ' + reason,
-      date: today,
-      created_by: currentUser.id
-    }).select().single();
+    const { error } = await db.from('payments').update({
+      description: '🗑️ DELETED: ' + (p.description || 'Payment')
+    }).eq('id', paymentId);
 
     if (error) throw error;
 
-    allPayments.unshift(data);
-    showToast('✅ Reversal entry added!', 'success');
+    // Update locally
+    const idx = allPayments.findIndex(x => x.id === paymentId);
+    if (idx !== -1) allPayments[idx].description = '🗑️ DELETED: ' + (p.description || 'Payment');
 
-    // Refresh detail view
+    showToast('🗑️ Payment deleted! History में दिखेगी।', 'success');
     if (activeClientId) openDetail(activeClientId);
 
   } catch(err) {
-    console.error('Reverse error:', err);
-    showToast('Reversal failed! Try again', 'error');
+    console.error('Delete error:', err);
+    showToast('Delete failed! Try again', 'error');
   }
 }
