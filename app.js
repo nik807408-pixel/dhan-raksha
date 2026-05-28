@@ -2358,12 +2358,37 @@ async function showDailyCollectionReport() {
 // ── NPA / OVERDUE TRACKING ─────────────────
 function showNPAReport() {
   const today = new Date();
+  today.setHours(0,0,0,0);
+
   const overdueClients = allClients.filter(c => {
-    const payments = allPayments.filter(p => p.client_id === c.id && p.type === 'credit');
-    const totalPaid = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+    if (c.status === 'closed' || c.status === 'inactive') return false;
     const loanAmt = parseFloat(c.balance) || 0;
-    const daysSinceCreated = Math.floor((today - new Date(c.created_at)) / (1000 * 60 * 60 * 24));
-    return loanAmt > totalPaid && daysSinceCreated > 30;
+    const intAmt = parseFloat(c.interest_amount) || 0;
+    if (!loanAmt) return false;
+
+    const totalWeeks = parseInt(c.loan_weeks) || 12;
+    const weeklyEMI = Math.round((loanAmt + intAmt) / totalWeeks);
+
+    // First EMI date se kitne weeks ho gaye
+    const firstEMI = new Date(c.first_emi_date || c.loan_date || c.created_at);
+    firstEMI.setHours(0,0,0,0);
+    if (firstEMI > today) return false; // loan abhi shuru nahi hua
+
+    const weeksElapsed = Math.floor((today - firstEMI) / (7 * 24 * 60 * 60 * 1000));
+    const expectedInstallments = Math.min(weeksElapsed, totalWeeks);
+    if (expectedInstallments <= 0) return false;
+
+    // Real payments (reversal exclude)
+    const realPaid = allPayments
+      .filter(p => p.client_id === c.id && p.type === 'credit' && !(p.description||'').includes('Reversal'))
+      .reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+    const debitReversals = allPayments
+      .filter(p => p.client_id === c.id && p.type === 'debit' && (p.description||'').includes('Reversal'))
+      .reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+    const netPaid = Math.max(0, realPaid - debitReversals);
+
+    const expectedAmt = expectedInstallments * weeklyEMI;
+    return netPaid < expectedAmt; // missed at least one EMI
   });
 
   const c = document.getElementById('main-content');
