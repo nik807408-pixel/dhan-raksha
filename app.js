@@ -262,12 +262,11 @@ function renderDashboard(c) {
         <div class="chart-title" style="margin:0">💰 Payment History / भुगतान इतिहास</div>
         <button onclick="exportPaymentsExcel()" style="background:var(--success);color:white;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer">📥 Export Excel</button>
       </div>
-      <!-- Client Filter -->
+      <!-- Client Search -->
       <div style="margin-bottom:10px;display:flex;gap:8px;align-items:center">
-        <select id="ph-client-filter" onchange="renderDashboard()" style="flex:1;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12px;color:var(--navy)">
-          <option value="">-- सभी Clients / All Clients --</option>
-          ${allClients.map(cl=>`<option value="${cl.id}">${cl.name}</option>`).join('')}
-        </select>
+        <input type="text" id="ph-client-search" placeholder="🔍 Client name search करें..." 
+          oninput="renderDashboard()"
+          style="flex:1;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12px;color:var(--navy)">
       </div>
       ${!allPayments || allPayments.length === 0 ? '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No payments yet / कोई भुगतान नहीं<br><span style="font-size:11px">Client पर click करके payment add करें</span></div>' :
       `<div style="overflow-x:auto">
@@ -284,12 +283,15 @@ function renderDashboard(c) {
           </thead>
           <tbody>
             ${(() => {
-              const filterClientId = document.getElementById('ph-client-filter')?.value || '';
-              const filtered = filterClientId
-                ? allPayments.filter(p => p.client_id === filterClientId)
-                : allPayments;
+              const searchQ = (document.getElementById('ph-client-search')?.value || '').toLowerCase().trim();
               const clientOutstanding = {};
               allClients.forEach(cl => { clientOutstanding[cl.id] = (parseFloat(cl.balance)||0) + (parseFloat(cl.interest_amount)||0); });
+              const filtered = searchQ
+                ? allPayments.filter(p => {
+                    const cl = allClients.find(c => c.id === p.client_id);
+                    return cl && cl.name.toLowerCase().includes(searchQ);
+                  })
+                : allPayments;
               return filtered.slice(0,50).map((p,i) => {
                 const client = allClients.find(c => c.id === p.client_id);
                 if (p.type === 'credit' && !(p.description||'').includes('Reversal') && client) {
