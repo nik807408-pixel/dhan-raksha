@@ -1351,17 +1351,73 @@ function renderPassbookTab() {
 }
 
 
+// ── HINDI TRANSLITERATION FOR SEARCH ────────────────────────────────────
+function hindiToLatin(str) {
+  if (!str) return '';
+  const cons = {'क':'k','ख':'kh','ग':'g','घ':'gh','ङ':'n','च':'ch','छ':'chh','ज':'j','झ':'jh','ञ':'n','ट':'t','ठ':'th','ड':'d','ढ':'dh','ण':'n','त':'t','थ':'th','द':'d','ध':'dh','न':'n','प':'p','फ':'ph','ब':'b','भ':'bh','म':'m','य':'y','र':'r','ल':'l','व':'v','श':'sh','ष':'sh','स':'s','ह':'h'};
+  const vowels = {'अ':'a','आ':'aa','इ':'i','ई':'ee','उ':'u','ऊ':'oo','ए':'e','ऐ':'ai','ओ':'o','औ':'au','ऋ':'ri'};
+  const matras = {'ा':'a','ि':'i','ी':'ee','ु':'u','ू':'oo','े':'e','ै':'ai','ो':'o','ौ':'au','ं':'n','ँ':'n','ः':'h','्':''};
+  
+  let result = '';
+  const chars = [...str];
+  for (let i = 0; i < chars.length; i++) {
+    const c = chars[i];
+    const next = chars[i+1] || '';
+    if (cons[c]) {
+      result += cons[c];
+      if (!matras[next] && next !== '्') result += 'a'; // inherent 'a'
+    } else if (matras[c]) {
+      result += matras[c];
+    } else if (vowels[c]) {
+      result += vowels[c];
+    } else if (c === ' ') {
+      result += ' ';
+    }
+    // skip halant - already handled above
+  }
+  return result.toLowerCase().replace(/aa/g,'a').replace(/ee/g,'i');
+}
+
+function nameMatchesSearch(name, query) {
+  if (!query) return true;
+  const q = query.toLowerCase().trim();
+  const nameLower = name.toLowerCase();
+  // Direct Hindi match
+  if (nameLower.includes(q)) return true;
+  // Transliterated match
+  const transliterated = hindiToLatin(name);
+  if (transliterated.includes(q)) return true;
+  // Also try removing spaces
+  if (transliterated.replace(/\s/g,'').includes(q.replace(/\s/g,''))) return true;
+  return false;
+}
+
+// ── HINDI TRANSLITERATION ────────────────────────────────────────────────
+function hindiToRoman(text) {
+  if (!text) return '';
+  const map = {'अ':'a','आ':'aa','इ':'i','ई':'ee','उ':'u','ऊ':'oo','ए':'e','ऐ':'ai','ओ':'o','औ':'au',
+    'क':'k','ख':'kh','ग':'g','घ':'gh','च':'ch','छ':'chh','ज':'j','झ':'jh',
+    'ट':'t','ठ':'th','ड':'d','ढ':'dh','ण':'n','त':'t','थ':'th','द':'d','ध':'dh','न':'n',
+    'प':'p','फ':'f','ब':'b','भ':'bh','म':'m','य':'y','र':'r','ल':'l','व':'v',
+    'श':'sh','ष':'sh','स':'s','ह':'h','क्ष':'ksh','त्र':'tr','ज्ञ':'gya',
+    'ा':'a','ि':'i','ी':'ee','ु':'u','ू':'oo','े':'e','ै':'ai','ो':'o','ौ':'au',
+    'ं':'n','ः':'h','्':'','ँ':'n','़':'','ृ':'ri'};
+  let result = text;
+  Object.entries(map).sort((a,b) => b[0].length - a[0].length).forEach(([h,r]) => {
+    result = result.split(h).join(r);
+  });
+  return result.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+}
+
 function filterPaymentHistory(searchQ) {
-  const q = (searchQ || '').toLowerCase().trim();
+  const q = (searchQ || '').trim().toLowerCase();
   const rows = document.querySelectorAll('#ph-table-body tr');
   rows.forEach(row => {
-    const clientName = row.dataset.client || '';
-    const phone = row.dataset.phone || '';
-    if (!q || clientName.toLowerCase().includes(q) || phone.includes(q)) {
-      row.style.display = '';
-    } else {
-      row.style.display = 'none';
-    }
+    const clientHindi = (row.dataset.client || '').toLowerCase();
+    const clientRoman = hindiToRoman(row.dataset.client || '');
+    const phone = (row.dataset.phone || '');
+    const show = !q || clientHindi.includes(q) || clientRoman.includes(q) || phone.includes(q);
+    row.style.display = show ? '' : 'none';
   });
 }
 
