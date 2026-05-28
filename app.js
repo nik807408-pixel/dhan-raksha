@@ -2531,7 +2531,7 @@ function sendWhatsAppReminder(clientId) {
   const c = allClients.find(x => x.id === clientId);
   if (!c || !c.phone) { showToast('No phone number / फोन नंबर नहीं है', 'error'); return; }
 
-  const payments = allPayments.filter(p => p.client_id === clientId && (p.type === 'credit' || (p.type === 'debit' && (p.description||'').includes('Reversal'))));
+  const payments = allPayments.filter(p => p.client_id === clientId && !(p.description||'').includes('DELETED') && (p.type === 'credit' || (p.type === 'debit' && (p.description||'').includes('Reversal'))));
   const totalPaid = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
   const pending = (parseFloat(c.balance) || 0) - totalPaid;
 
@@ -2799,7 +2799,7 @@ function showClientPassbook(clientId) {
   const cl = allClients.find(x => x.id === clientId);
   if (!cl) return;
 
-  const payments = allPayments.filter(p => p.client_id === clientId && (p.type === 'credit' || (p.type === 'debit' && (p.description||'').includes('Reversal'))))
+  const payments = allPayments.filter(p => p.client_id === clientId && !(p.description||'').includes('DELETED') && (p.type === 'credit' || (p.type === 'debit' && (p.description||'').includes('Reversal'))))
     .sort((a,b) => new Date(a.date) - new Date(b.date));
 
   const loan = parseFloat(cl.balance) || 0;
