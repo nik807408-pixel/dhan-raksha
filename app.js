@@ -393,6 +393,7 @@ function renderClientsPage(c) {
       <button class="tab" onclick="filterByStatus('active',this)">Active (${allClients.filter(x=>x.status==='active').length})</button>
       <button class="tab" onclick="filterByStatus('vip',this)">VIP (${allClients.filter(x=>x.status==='vip').length})</button>
       <button class="tab" onclick="filterByStatus('inactive',this)">Inactive (${allClients.filter(x=>x.status==='inactive').length})</button>
+      <button class="tab" onclick="filterByStatus('closed',this)" style="color:#dc2626">🔒 Closed (${allClients.filter(x=>x.status==='closed').length})</button>
     </div>
     <div id="client-list">${allClients.map(clientCard).join('') || emptyState('👤','No clients yet / अभी कोई ग्राहक नहीं')}</div>
   `;
@@ -419,8 +420,8 @@ function filterClients() {
 function clientCard(c) {
   const bal = parseFloat(c.balance) || 0;
   const balClass = bal > 0 ? 'bal-pos' : bal < 0 ? 'bal-neg' : 'bal-zero';
-  const statusMap = { active:'status-active', inactive:'status-inactive', vip:'status-vip' };
-  const statusLabel = { active:'Active', inactive:'Inactive', vip:'⭐ VIP' };
+  const statusMap = { active:'status-active', inactive:'status-inactive', vip:'status-vip', closed:'status-inactive' };
+  const statusLabel = { active:'Active', inactive:'Inactive', vip:'⭐ VIP', closed:'🔒 Closed' };
   const photoHtml = c.photo_url
     ? `<img src="${c.photo_url}" class="avatar-img" onerror="this.style.display='none'"/>`
     : '';
@@ -1001,11 +1002,42 @@ async function openDetail(id) {
       <div>
         <div style="font-size:18px;font-weight:700;color:var(--navy)">${c.name}</div>
         <div style="font-size:11px;color:var(--muted)">${emp ? 'Assigned: '+emp.name : ''}</div>
-        <span class="status-badge ${{active:'status-active',inactive:'status-inactive',vip:'status-vip'}[c.status]||'status-active'}">${{active:'Active',inactive:'Inactive',vip:'⭐ VIP'}[c.status]||'Active'}</span>
+        <span class="status-badge ${{active:'status-active',inactive:'status-inactive',vip:'status-vip',closed:'status-inactive'}[c.status]||'status-active'}">${{active:'Active',inactive:'Inactive',vip:'⭐ VIP',closed:'🔒 Closed'}[c.status]||'Active'}</span>
       </div>
     </div>
 
-    <div class="big-balance">
+    ${c.status === 'closed' ? `
+    <!-- CLOSED ACCOUNT SECTION -->
+    <div style="background:#f0fdf4;border:2px solid #22c55e;border-radius:12px;padding:16px;margin:12px 0;text-align:center">
+      <div style="font-size:20px;margin-bottom:4px">🎉</div>
+      <div style="font-size:15px;font-weight:800;color:#16a34a">Loan Complete!</div>
+      <div style="font-size:12px;color:#166534;margin-bottom:12px">सभी किस्त जमा हो गई — Account Closed</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;text-align:left">
+        <div style="background:white;border-radius:8px;padding:8px">
+          <div style="font-size:10px;color:var(--muted)">Loan Amount</div>
+          <div style="font-weight:700;color:var(--navy)">₹${fmt(parseFloat(c.balance)||0)}</div>
+        </div>
+        <div style="background:white;border-radius:8px;padding:8px">
+          <div style="font-size:10px;color:var(--muted)">Interest</div>
+          <div style="font-weight:700;color:var(--navy)">₹${fmt(parseFloat(c.interest_amount)||0)}</div>
+        </div>
+        <div style="background:white;border-radius:8px;padding:8px">
+          <div style="font-size:10px;color:var(--muted)">Loan Cycle</div>
+          <div style="font-weight:700;color:var(--navy)">${c.loan_cycle||'1st'}</div>
+        </div>
+        <div style="background:white;border-radius:8px;padding:8px">
+          <div style="font-size:10px;color:var(--muted)">Tenure</div>
+          <div style="font-weight:700;color:var(--navy)">${c.loan_weeks||12} Weeks</div>
+        </div>
+      </div>
+      <button onclick="openRenewModal('${c.id}')" style="width:100%;padding:12px;background:linear-gradient(135deg,#e65c00,#f9d423);color:white;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:8px">
+        🔄 नया Loan / Renew Loan
+      </button>
+      <button onclick="showClientPassbook('${c.id}')" style="width:100%;padding:10px;background:var(--navy);color:white;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">
+        📒 Past Loan History देखें
+      </button>
+    </div>
+    ` : ''}    <div class="big-balance">
       <div class="label">Balance / बैलेंस</div>
       <div class="amount" style="color:${bal>=0?'var(--success)':'var(--danger)'}">₹${fmt(bal)}</div>
     </div>
@@ -1142,6 +1174,29 @@ async function savePayment() {
   closeModal('pay-modal');
   showToast('Payment added! / भुगतान जोड़ा!', 'success');
   await loadAll();
+
+  // Auto-close check — outstanding ₹0 hone pe
+  const cl = allClients.find(c => c.id === activeClientId);
+  if (cl) {
+    const totalLoanInterest = (parseFloat(cl.balance)||0) + (parseFloat(cl.interest_amount)||0);
+    const totalPaid = allPayments
+      .filter(p => p.client_id === activeClientId && p.type === 'credit' && !(p.description||'').includes('Reversal') && !(p.description||'').includes('DELETED'))
+      .reduce((s,p) => s + (parseFloat(p.amount)||0), 0);
+    const debitRev = allPayments
+      .filter(p => p.client_id === activeClientId && p.type === 'debit' && (p.description||'').includes('Reversal'))
+      .reduce((s,p) => s + (parseFloat(p.amount)||0), 0);
+    const outstanding = Math.max(0, totalLoanInterest - totalPaid + debitRev);
+
+    if (outstanding <= 0 && cl.status !== 'closed') {
+      const confirmClose = confirm(`🎉 Loan पूरा हो गया!\n\n${cl.name} का account CLOSE करें?`);
+      if (confirmClose) {
+        await db.from('clients').update({ status: 'closed' }).eq('id', activeClientId);
+        await loadAll();
+        showToast(`✅ ${cl.name} का account close हो गया!`, 'success');
+      }
+    }
+  }
+
   openDetail(activeClientId);
 }
 
@@ -1494,14 +1549,32 @@ async function submitRenewal(clientId) {
   const interest = parseFloat(document.getElementById('rn-interest')?.value) || 0;
   const weeks    = parseInt(document.getElementById('rn-weeks')?.value) || 12;
   const cycle    = document.getElementById('rn-cycle')?.value || '2nd';
-  const loanDate = document.getElementById('rn-loan-date')?.value || '';
-  const emiDate  = document.getElementById('rn-emi-date')?.value || '';
+  const loanDateRaw = document.getElementById('rn-loan-date')?.value || '';
+  const emiDateRaw  = document.getElementById('rn-emi-date')?.value || '';
+  // Ensure YYYY-MM-DD format
+  const loanDate = loanDateRaw ? new Date(loanDateRaw).toISOString().slice(0,10) : null;
+  const emiDate  = emiDateRaw  ? new Date(emiDateRaw).toISOString().slice(0,10)  : null;
 
   if (!balance) { showToast('Loan amount daalo!', 'error'); return; }
 
   const weeklyEMI = Math.round((balance + interest) / weeks);
 
   try {
+    // Pehle purana loan history mein save karo
+    const oldClient = allClients.find(c => c.id === clientId);
+    if (oldClient) {
+      await db.from('loan_history').insert({
+        client_id: clientId,
+        loan_cycle: oldClient.loan_cycle || '1st',
+        balance: parseFloat(oldClient.balance) || 0,
+        interest_amount: parseFloat(oldClient.interest_amount) || 0,
+        loan_weeks: parseInt(oldClient.loan_weeks) || 12,
+        loan_date: oldClient.loan_date || null,
+        first_emi_date: oldClient.first_emi_date || null,
+        closed_date: new Date().toISOString().slice(0,10)
+      });
+    }
+
     const { error } = await db.from('clients').update({
       balance,
       interest_amount: interest,
@@ -1515,10 +1588,19 @@ async function submitRenewal(clientId) {
 
     if (error) throw error;
 
+    // Mark client as active after renewal
+    await db.from('clients').update({ status: 'active' }).eq('id', clientId);
+
     document.getElementById('renew-modal')?.remove();
     showToast(`✅ Loan Renewed! ${cycle} cycle — ₹${fmt(weeklyEMI)}/week`, 'success');
     await loadAll();
-    showClientPassbook(clientId);
+
+    // Show More tab → Passbook with new loan
+    showPage('more');
+    setTimeout(() => {
+      switchMoreTab('passbook', document.querySelector('[onclick*="passbook"]'));
+      setTimeout(() => showClientPassbook(clientId), 300);
+    }, 300);
 
   } catch(err) {
     console.error('Renewal error:', err);
@@ -2795,12 +2877,49 @@ function passbookOpen(el) {
 }
 
 
-function showClientPassbook(clientId) {
+function showClientPassbook(clientId, showFullHistory = false) {
   const cl = allClients.find(x => x.id === clientId);
   if (!cl) return;
 
-  const payments = allPayments.filter(p => p.client_id === clientId && !(p.description||'').includes('DELETED') && (p.type === 'credit' || (p.type === 'debit' && (p.description||'').includes('Reversal'))))
-    .sort((a,b) => new Date(a.date) - new Date(b.date));
+  // Load loan history for this client
+  db.from('loan_history').select('*').eq('client_id', clientId).order('created_at', {ascending: true}).then(({ data: history }) => {
+    const historyList = history || [];
+
+    // Only show payments from current loan cycle (after loan_date)
+    const loanStartDate = cl.loan_date || cl.first_emi_date || null;
+    const payments = allPayments.filter(p => {
+      if (p.client_id !== clientId) return false;
+      if ((p.description||'').includes('DELETED')) return false;
+      if (!(p.type === 'credit' || (p.type === 'debit' && (p.description||'').includes('Reversal')))) return false;
+      if (!showFullHistory && loanStartDate && p.date && p.date < loanStartDate) return false;
+      return true;
+    }).sort((a,b) => new Date(a.date) - new Date(b.date));
+
+    const c = document.getElementById('main-content');
+    if (!c) return;
+
+    // History tabs
+    const historyTabs = historyList.length > 0 ? `
+    <div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;padding-bottom:4px">
+      ${historyList.map((h,i) => `
+        <button onclick="showLoanHistoryPassbook('${clientId}', ${i})" 
+          style="white-space:nowrap;padding:5px 10px;background:#f3f4f6;border:1px solid var(--border);border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;color:var(--muted)">
+          📋 ${h.loan_cycle||'Past'}
+        </button>`).join('')}
+      <button onclick="showClientPassbook('${clientId}', false)" 
+        style="white-space:nowrap;padding:5px 10px;background:var(--navy);border:none;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;color:white">
+        📒 Current (${cl.loan_cycle||'Latest'})
+      </button>
+    </div>` : '';
+
+    c.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <button onclick="showPassbook()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;color:var(--muted)">← Back</button>
+      <div style="font-size:16px;font-weight:700;color:var(--navy)">📒 ${cl.name}</div>
+      <button onclick="printPassbook('${clientId}')" style="margin-left:auto;background:var(--navy);color:white;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer">🖨️ Print</button>
+    </div>
+
+    ${historyTabs}
 
   const loan = parseFloat(cl.balance) || 0;
   const interest = parseFloat(cl.interest_amount) || 0;
@@ -2810,15 +2929,7 @@ function showClientPassbook(clientId) {
   const weeklyInterest = weeklyEMI - weeklyPrincipal;
   const totalDuePerWeek = cl.emi_amount || weeklyEMI;
 
-  const c = document.getElementById('main-content');
-  c.innerHTML = `
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-      <button onclick="showPassbook()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;color:var(--muted)">← Back</button>
-      <div style="font-size:16px;font-weight:700;color:var(--navy)">📒 ${cl.name}</div>
-      <button onclick="printPassbook('${clientId}')" style="margin-left:auto;background:var(--navy);color:white;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer">🖨️ Print</button>
-    </div>
-
-    <!-- Client Info Card -->
+    // Client Info Card
     <div style="background:var(--navy);border-radius:14px;padding:14px;margin-bottom:14px;color:white">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
         <div><span style="opacity:.6">शाखा कार्यालय:</span> <strong>बलिया</strong></div>
@@ -2830,6 +2941,7 @@ function showClientPassbook(clientId) {
         <div><span style="opacity:.6">Loan No.:</span> <strong>${cl.loan_id||cl.customer_id||'—'}</strong></div>
         <div><span style="opacity:.6">DB Date:</span> <strong>${cl.loan_date||cl.first_emi_date||'—'}</strong></div>
         <div><span style="opacity:.6">Loan Amt:</span> <strong style="color:#FFD700">₹${fmt(loan)}</strong></div>
+        <div><span style="opacity:.6">Interest:</span> <strong style="color:#FFD700">₹${fmt(interest)}</strong></div>
         <div><span style="opacity:.6">Weekly EMI:</span> <strong style="color:#FFD700">₹${fmt(weeklyEMI)}</strong></div>
         <div><span style="opacity:.6">Loan Cycle:</span> <strong>${cl.loan_cycle||'1st'}</strong></div>
         <div><span style="opacity:.6">Tenure:</span> <strong>${totalWeeks} Weeks</strong></div>
@@ -2914,7 +3026,8 @@ function showClientPassbook(clientId) {
               }
             });
 
-            // Show remaining empty rows
+            // Show remaining empty rows — only if outstanding > 0
+            if (runningOutstanding > 0) {
             let outCounter = runningOutstanding;
             for (let i = weekNum + 1; i <= totalWeeks; i++) {
               outCounter = Math.max(0, outCounter - weeklyEMI);
@@ -2932,7 +3045,8 @@ function showClientPassbook(clientId) {
                   <td style="padding:6px 8px;border-right:1px solid var(--border)"></td>
                   <td style="padding:6px 8px"></td>
                 </tr>`);
-            }
+            } // end empty rows loop
+            } // end if outstanding > 0
             return rows.join('');
           })()}
         </tbody>
@@ -2967,6 +3081,115 @@ function showClientPassbook(clientId) {
       <div style="font-size:13px;color:var(--navy)">${cl.notes||'—'}</div>
     </div>
   `;
+  }); // end db.from('loan_history').then()
+}
+
+// ── LOAN HISTORY PASSBOOK ─────────────────────────────────────────────────
+async function showLoanHistoryPassbook(clientId, historyIndex) {
+  const cl = allClients.find(x => x.id === clientId);
+  if (!cl) return;
+
+  const { data: history } = await db.from('loan_history').select('*').eq('client_id', clientId).order('created_at', {ascending: true});
+  const historyList = history || [];
+  const h = historyList[historyIndex];
+  if (!h) return;
+
+  // Get payments between this loan's start and next loan's start
+  const startDate = h.loan_date || h.first_emi_date || '';
+  const nextH = historyList[historyIndex + 1];
+  const endDate = nextH ? (nextH.loan_date || nextH.first_emi_date || '') : cl.loan_date || '';
+
+  const payments = allPayments.filter(p => {
+    if (p.client_id !== clientId) return false;
+    if ((p.description||'').includes('DELETED')) return false;
+    if (!(p.type === 'credit' || (p.type === 'debit' && (p.description||'').includes('Reversal')))) return false;
+    if (startDate && p.date < startDate) return false;
+    if (endDate && p.date >= endDate) return false;
+    return true;
+  }).sort((a,b) => new Date(a.date) - new Date(b.date));
+
+  const loan = parseFloat(h.balance) || 0;
+  const interest = parseFloat(h.interest_amount) || 0;
+  const totalWeeks = parseInt(h.loan_weeks) || 12;
+  const weeklyEMI = Math.round((loan + interest) / totalWeeks);
+  const weeklyPrincipal = Math.round(loan / totalWeeks);
+  const weeklyInterest = weeklyEMI - weeklyPrincipal;
+  const totalPaid = payments.filter(p=>p.type==='credit'&&!(p.description||'').includes('Reversal')).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
+
+  const c = document.getElementById('main-content');
+  if (!c) return;
+
+  // History tabs
+  const historyTabs = `
+  <div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;padding-bottom:4px">
+    ${historyList.map((ht,i) => `
+      <button onclick="showLoanHistoryPassbook('${clientId}', ${i})" 
+        style="white-space:nowrap;padding:5px 10px;background:${i===historyIndex?'#7c3aed':'#f3f4f6'};border:${i===historyIndex?'none':'1px solid var(--border)'};border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;color:${i===historyIndex?'white':'var(--muted)'}">
+        📋 ${ht.loan_cycle||'Past'}
+      </button>`).join('')}
+    <button onclick="showClientPassbook('${clientId}', false)" 
+      style="white-space:nowrap;padding:5px 10px;background:#f3f4f6;border:1px solid var(--border);border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;color:var(--navy)">
+      📒 Current (${cl.loan_cycle||'Latest'})
+    </button>
+  </div>`;
+
+  c.innerHTML = `
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+    <button onclick="showClientPassbook('${clientId}')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;color:var(--muted)">← Back</button>
+    <div style="font-size:16px;font-weight:700;color:var(--navy)">📋 ${cl.name} — ${h.loan_cycle||'Past'}</div>
+  </div>
+
+  ${historyTabs}
+
+  <!-- Header -->
+  <div style="background:var(--navy);border-radius:14px;padding:14px;margin-bottom:14px;color:white">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
+      <div><span style="opacity:.6">Loan Amt:</span> <strong style="color:#FFD700">₹${fmt(loan)}</strong></div>
+      <div><span style="opacity:.6">Interest:</span> <strong style="color:#FFD700">₹${fmt(interest)}</strong></div>
+      <div><span style="opacity:.6">Weekly EMI:</span> <strong style="color:#FFD700">₹${fmt(weeklyEMI)}</strong></div>
+      <div><span style="opacity:.6">Loan Cycle:</span> <strong>${h.loan_cycle||'—'}</strong></div>
+      <div><span style="opacity:.6">Tenure:</span> <strong>${totalWeeks} Weeks</strong></div>
+      <div><span style="opacity:.6">Status:</span> <strong style="color:#4ade80">✅ Closed</strong></div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div style="overflow-x:auto;background:white;border-radius:12px;box-shadow:0 2px 8px rgba(15,37,71,.08)">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:600px">
+      <thead>
+        <tr style="background:var(--navy);color:white">
+          <th style="padding:8px;border-right:1px solid #ffffff30">सप्ताह<br>Week</th>
+          <th style="padding:8px;border-right:1px solid #ffffff30">तारीख<br>Date</th>
+          <th style="padding:8px;border-right:1px solid #ffffff30">मूलधन<br>Principal</th>
+          <th style="padding:8px;border-right:1px solid #ffffff30">ब्याज<br>Interest</th>
+          <th style="padding:8px;border-right:1px solid #ffffff30">कुल देय<br>Total Due</th>
+          <th style="padding:8px;border-right:1px solid #ffffff30;color:#4ade80">प्राप्त<br>Received</th>
+          <th style="padding:8px;color:#f87171">बकाया<br>Outstanding</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${payments.map((p,i) => {
+          const amt = parseFloat(p.amount)||0;
+          return `<tr style="background:${i%2===0?'white':'#f8fafc'};border-bottom:1px solid var(--border)">
+            <td style="padding:7px 8px;text-align:center;font-weight:700;border-right:1px solid var(--border)">${i+1}</td>
+            <td style="padding:7px 8px;text-align:center;border-right:1px solid var(--border);font-size:11px">${p.date||'—'}</td>
+            <td style="padding:7px 8px;text-align:right;border-right:1px solid var(--border)">₹${fmt(weeklyPrincipal)}</td>
+            <td style="padding:7px 8px;text-align:right;border-right:1px solid var(--border)">₹${fmt(weeklyInterest)}</td>
+            <td style="padding:7px 8px;text-align:right;border-right:1px solid var(--border)">₹${fmt(weeklyEMI)}</td>
+            <td style="padding:7px 8px;text-align:right;border-right:1px solid var(--border);color:var(--success);font-weight:700">₹${fmt(amt)}</td>
+            <td style="padding:7px 8px;text-align:right;color:var(--danger);font-weight:700">₹${fmt(Math.max(0,(loan+interest)-payments.slice(0,i+1).filter(x=>x.type==='credit').reduce((s,x)=>s+(parseFloat(x.amount)||0),0)))}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+      <tfoot>
+        <tr style="background:#f0f4f8;font-weight:700;border-top:2px solid var(--navy)">
+          <td colspan="5" style="padding:8px 10px;color:var(--navy)">कुल / Total</td>
+          <td style="padding:8px 10px;text-align:right;color:var(--success)">₹${fmt(totalPaid)}</td>
+          <td style="padding:8px 10px;text-align:right;color:var(--success)">₹0.00 ✅</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>`;
 }
 
 function printPassbook(clientId) {
@@ -3422,6 +3645,7 @@ async function deletePayment(paymentId) {
     if (idx !== -1) allPayments[idx].description = '🗑️ DELETED: ' + (p.description || 'Payment');
 
     showToast('🗑️ Payment deleted! History में दिखेगी।', 'success');
+    await loadPayments(); // Reload from Supabase
     if (activeClientId) openDetail(activeClientId);
 
   } catch(err) {
