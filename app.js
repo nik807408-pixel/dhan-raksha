@@ -1595,12 +1595,14 @@ async function submitRenewal(clientId) {
     showToast(`✅ Loan Renewed! ${cycle} cycle — ₹${fmt(weeklyEMI)}/week`, 'success');
     await loadAll();
 
-    // Show More tab → Passbook with new loan
-    showPage('more');
+    // Navigate to passbook directly
+    showPage('invoices');
     setTimeout(() => {
-      switchMoreTab('passbook', document.querySelector('[onclick*="passbook"]'));
-      setTimeout(() => showClientPassbook(clientId), 300);
-    }, 300);
+      moreTab = 'passbook';
+      const c = document.getElementById('more-content');
+      if (c) c.innerHTML = renderPassbookTab();
+      setTimeout(() => showClientPassbook(clientId), 200);
+    }, 400);
 
   } catch(err) {
     console.error('Renewal error:', err);
