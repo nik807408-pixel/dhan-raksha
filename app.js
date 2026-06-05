@@ -2921,18 +2921,19 @@ function showClientPassbook(clientId, showFullHistory = false) {
       <button onclick="printPassbook('${clientId}')" style="margin-left:auto;background:var(--navy);color:white;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer">🖨️ Print</button>
     </div>
 
-    ${historyTabs}
+    ${historyTabs}`;
 
-  const loan = parseFloat(cl.balance) || 0;
-  const interest = parseFloat(cl.interest_amount) || 0;
-  const totalWeeks = parseInt(cl.loan_weeks) || 12;
-  const weeklyEMI = Math.round((loan + interest) / totalWeeks);
-  const weeklyPrincipal = Math.round(loan / totalWeeks);
-  const weeklyInterest = weeklyEMI - weeklyPrincipal;
-  const totalDuePerWeek = cl.emi_amount || weeklyEMI;
+    // Variables for passbook calculation
+    const loan = parseFloat(cl.balance) || 0;
+    const interest = parseFloat(cl.interest_amount) || 0;
+    const totalWeeks = parseInt(cl.loan_weeks) || 12;
+    const weeklyEMI = Math.round((loan + interest) / totalWeeks);
+    const weeklyPrincipal = Math.round(loan / totalWeeks);
+    const weeklyInterest = weeklyEMI - weeklyPrincipal;
+    const totalDuePerWeek = cl.emi_amount || weeklyEMI;
 
-    // Client Info Card
-    <div style="background:var(--navy);border-radius:14px;padding:14px;margin-bottom:14px;color:white">
+    c.innerHTML += `
+    <!-- Client Info Card -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
         <div><span style="opacity:.6">शाखा कार्यालय:</span> <strong>बलिया</strong></div>
         <div><span style="opacity:.6">केंद्र शाखा:</span> <strong>${cl.center_name||'—'}</strong></div>
