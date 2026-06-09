@@ -497,6 +497,8 @@ function openEditClient(c) {
   if (document.getElementById('f-loan-cycle')) document.getElementById('f-loan-cycle').value = c.loan_cycle || '1st';
   if (document.getElementById('f-loan-weeks')) document.getElementById('f-loan-weeks').value = c.loan_weeks || '12';
   if (document.getElementById('f-loan-purpose')) document.getElementById('f-loan-purpose').value = c.loan_purpose || '';
+  if (document.getElementById('f-lpf')) document.getElementById('f-lpf').value = c.lpf || 500;
+  if (document.getElementById('f-lpc')) document.getElementById('f-lpc').value = c.lpc || Math.ceil((parseFloat(c.balance)||0) / 10000) * 500;
 
   // Photo
   const wrap = document.getElementById('photo-preview-wrap');
@@ -901,6 +903,8 @@ async function saveClient() {
     marital_status: document.getElementById('f-marital')?.value || 'unmarried',
     address2: v('f-address2'),
     interest_amount: parseFloat(v('f-interest')) || 0,
+    lpf: parseFloat(v('f-lpf')) || 500,
+    lpc: parseFloat(v('f-lpc')) || 0,
     finance_company: v('f-bank'),
     kyc_approved: document.getElementById('f-kyc-approved')?.value === 'true',
     center_name: v('f-center-name'),
@@ -972,11 +976,22 @@ async function saveClient() {
 
 async function deleteClient() {
   if (!confirm('Delete this client? / इस ग्राहक को हटाएं?')) return;
-  await db.from('clients').delete().eq('id', editingClientId);
-  closeModal('client-modal');
-  showToast('Deleted / हटाया गया');
-  await loadAll();
-  showPage(currentPage);
+  try {
+    // Pehle loan_history delete karo
+    await db.from('loan_history').delete().eq('client_id', editingClientId);
+    // Phir payments delete karo
+    await db.from('payments').delete().eq('client_id', editingClientId);
+    // Ab client delete karo
+    const { error } = await db.from('clients').delete().eq('id', editingClientId);
+    if (error) throw error;
+    closeModal('client-modal');
+    showToast('✅ Deleted / हटाया गया', 'success');
+    await loadAll();
+    showPage(currentPage);
+  } catch(err) {
+    console.error('Delete error:', err);
+    showToast('Delete failed: ' + err.message, 'error');
+  }
 }
 
 // ── DETAIL ────────────────────────────────
@@ -1563,6 +1578,13 @@ async function submitRenewal(clientId) {
     // Pehle purana loan history mein save karo
     const oldClient = allClients.find(c => c.id === clientId);
     if (oldClient) {
+      // Count real payments for this cycle
+      const cyclePaymentCount = allPayments.filter(p => 
+        p.client_id === clientId && 
+        p.type === 'credit' && 
+        !(p.description||'').includes('DELETED')
+      ).length;
+      
       await db.from('loan_history').insert({
         client_id: clientId,
         loan_cycle: oldClient.loan_cycle || '1st',
@@ -1571,7 +1593,9 @@ async function submitRenewal(clientId) {
         loan_weeks: parseInt(oldClient.loan_weeks) || 12,
         loan_date: oldClient.loan_date || null,
         first_emi_date: oldClient.first_emi_date || null,
-        closed_date: new Date().toISOString().slice(0,10)
+        closed_date: new Date().toISOString().slice(0,10),
+        closed_at: new Date().toISOString(),
+        payment_count: cyclePaymentCount
       });
     }
 
@@ -1624,7 +1648,11 @@ function renderCashBookTab() {
         <div style="font-size:15px;font-weight:700;color:var(--navy)">🧾 Cash Book</div>
         <div style="font-size:11px;color:var(--muted)">रोज़ाना नकद बही</div>
       </div>
-      <button onclick="printCashBook()" style="background:var(--navy);color:white;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer">🖨️ Print</button>
+      <div style="display:flex;gap:6px">
+        <button onclick="loadCashBook()" style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer">📂 Load</button>
+        <button onclick="saveCashBook()" style="background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer">💾 Save</button>
+        <button onclick="printCashBook()" style="background:var(--navy);color:white;border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer">🖨️ Print</button>
+      </div>
     </div>
 
     <!-- Header -->
@@ -1798,6 +1826,191 @@ function calcDenom() {
   if(elTotal) elTotal.textContent = '₹'+total.toLocaleString('en-IN');
 }
 
+// ── QUICK PAY FROM MEETING DAY ────────────────────────────────────────────
+async function quickPay(clientId, defaultEmi) {
+  const cl = allClients.find(c => c.id === clientId);
+  if (!cl) return;
+
+  const amount = prompt(`💳 ${cl.name}\nInstallment Amount (₹):`, defaultEmi);
+  if (!amount || isNaN(parseFloat(amount))) return;
+
+  const today = new Date().toISOString().slice(0,10);
+
+  try {
+    const { data, error } = await db.from('payments').insert({
+      client_id: clientId,
+      amount: parseFloat(amount),
+      type: 'credit',
+      description: 'Cash / नकद',
+      date: today,
+      created_by: currentUser?.id || null
+    }).select().single();
+
+    if (error) throw error;
+
+    allPayments.unshift(data);
+    showToast(`✅ ₹${fmt(parseFloat(amount))} — ${cl.name}`, 'success');
+
+    // Auto-close check
+    const totalLoanInterest = (parseFloat(cl.balance)||0) + (parseFloat(cl.interest_amount)||0);
+    const totalPaid = allPayments
+      .filter(p => p.client_id === clientId && p.type === 'credit' && !(p.description||'').includes('DELETED'))
+      .reduce((s,p) => s+(parseFloat(p.amount)||0), 0);
+    const outstanding = Math.max(0, totalLoanInterest - totalPaid);
+
+    if (outstanding <= 0 && cl.status !== 'closed') {
+      const confirmClose = confirm(`🎉 ${cl.name} ka loan pura ho gaya!\nAccount CLOSE karein?`);
+      if (confirmClose) {
+        await db.from('clients').update({ status: 'closed' }).eq('id', clientId);
+        await loadAll();
+      }
+    } else {
+      await loadAll();
+    }
+
+    // Refresh meeting tab
+    switchMoreTab('meeting', document.querySelector('[onclick*="meeting"]'));
+
+  } catch(err) {
+    showToast('Payment failed: ' + err.message, 'error');
+  }
+}
+
+
+function autoCalcLPFLPC() {
+  const balance = parseFloat(document.getElementById('f-balance')?.value) || 0;
+  const lpf = 500; // Fixed
+  const lpc = Math.ceil(balance / 10000) * 500; // ₹500 per ₹10,000
+
+  const lpfEl = document.getElementById('f-lpf');
+  const lpcEl = document.getElementById('f-lpc');
+  if (lpfEl) lpfEl.value = lpf;
+  if (lpcEl) lpcEl.value = lpc;
+}
+
+// ── CASH BOOK SAVE/LOAD ────────────────────────────────────────────────────
+async function saveCashBook() {
+  const date = document.getElementById('cb-date')?.value;
+  if (!date) { showToast('Date daalo pehle!', 'error'); return; }
+
+  const gv = id => parseFloat(document.getElementById(id)?.value||0)||0;
+  const gi = id => parseInt(document.getElementById(id)?.value||0)||0;
+
+  const data = {
+    entry_date: date,
+    day_name: document.getElementById('cb-day')?.value || '',
+    opening: gv('cb-opening'), collection: gv('cb-coll'),
+    lpf: gv('cb-lpf'), lpc: gv('cb-lpc'),
+    prepayment: gv('cb-prepay'), overdue: gv('cb-od'),
+    disbursement: gv('cb-disb'), bank_deposit: gv('cb-bank'),
+    expense1: gv('cb-exp1'), expense2: gv('cb-exp2'), expense3: gv('cb-exp3'),
+    denom_2000: gi('denom-2000'), denom_500: gi('denom-500'),
+    denom_200: gi('denom-200'), denom_100: gi('denom-100'),
+    denom_50: gi('denom-50'), denom_20: gi('denom-20'),
+    denom_10: gi('denom-10'), denom_coin: gv('denom-coin'),
+    created_by: currentUser?.id || null
+  };
+
+  try {
+    const { error } = await db.from('cash_book').upsert(data, { onConflict: 'entry_date' });
+    if (error) throw error;
+    showToast('✅ Cash Book saved! / सेव हो गई', 'success');
+  } catch(err) {
+    showToast('Save failed: ' + err.message, 'error');
+  }
+}
+
+async function loadCashBook() {
+  const date = document.getElementById('cb-date')?.value;
+  if (!date) { showToast('Date select karo!', 'error'); return; }
+
+  try {
+    const { data, error } = await db.from('cash_book').select('*').eq('entry_date', date).single();
+    if (error || !data) { showToast('Is date ka koi record nahi!', 'error'); return; }
+
+    const sv = (id, val) => { 
+      const el = document.getElementById(id); 
+      if(el) { el.value = val||0; el.dispatchEvent(new Event('input')); }
+    };
+    sv('cb-day', data.day_name); sv('cb-opening', data.opening);
+    sv('cb-coll', data.collection); sv('cb-lpf', data.lpf);
+    sv('cb-lpc', data.lpc); sv('cb-prepay', data.prepayment);
+    sv('cb-od', data.overdue); sv('cb-disb', data.disbursement);
+    sv('cb-bank', data.bank_deposit); sv('cb-exp1', data.expense1);
+    sv('cb-exp2', data.expense2); sv('cb-exp3', data.expense3);
+    sv('denom-2000', data.denom_2000); sv('denom-500', data.denom_500);
+    sv('denom-200', data.denom_200); sv('denom-100', data.denom_100);
+    sv('denom-50', data.denom_50); sv('denom-20', data.denom_20);
+    sv('denom-10', data.denom_10); sv('denom-coin', data.denom_coin);
+    calcCashBook(); 
+    if (typeof calcDenom === 'function') calcDenom();
+    showToast('✅ Cash Book loaded!', 'success');
+  } catch(err) {
+    showToast('Load failed: ' + err.message, 'error');
+  }
+}
+
+// ── COLLECTION REGISTER SAVE/LOAD ─────────────────────────────────────────
+async function saveCollReg() {
+  const date = document.getElementById('cr-date')?.value;
+  if (!date) { showToast('Date daalo!', 'error'); return; }
+
+  // Get all rows data
+  const rows = document.querySelectorAll('#cr-tbody tr[data-center]');
+  const entries = [];
+
+  rows.forEach(row => {
+    const centerName = row.dataset.center || '';
+    const due = parseFloat(row.querySelector('[data-col="due"]')?.value||0)||0;
+    const pre = parseFloat(row.querySelector('[data-col="pre"]')?.value||0)||0;
+    const od = parseFloat(row.querySelector('[data-col="od"]')?.value||0)||0;
+    const lpf = parseFloat(row.querySelector('[data-col="lpf"]')?.value||0)||0;
+    const lpc = parseFloat(row.querySelector('[data-col="lpc"]')?.value||0)||0;
+    const remark = row.querySelector('input[placeholder]')?.value || '';
+    if (centerName) entries.push({
+      entry_date: date, center_name: centerName,
+      due_collection: due, pre_collection: pre,
+      od_collection: od, lpf, lpc,
+      total_collection: due+pre+od+lpf+lpc,
+      remark, created_by: currentUser?.id || null
+    });
+  });
+
+  if (!entries.length) { showToast('Koi data nahi!', 'error'); return; }
+
+  try {
+    await db.from('collection_register').delete().eq('entry_date', date);
+    const { error } = await db.from('collection_register').insert(entries);
+    if (error) throw error;
+    showToast(`✅ ${entries.length} centers saved!`, 'success');
+  } catch(err) {
+    showToast('Save failed: ' + err.message, 'error');
+  }
+}
+
+async function loadCollReg() {
+  const date = document.getElementById('cr-date')?.value;
+  if (!date) { showToast('Date select karo!', 'error'); return; }
+
+  try {
+    const { data, error } = await db.from('collection_register').select('*').eq('entry_date', date);
+    if (error || !data?.length) { showToast('Is date ka koi record nahi!', 'error'); return; }
+
+    data.forEach(row => {
+      const tr = document.querySelector(`#cr-tbody tr[data-center="${row.center_name}"]`);
+      if (!tr) return;
+      const sv = (col, val) => { const el = tr.querySelector(`[data-col="${col}"]`); if(el) el.value = val||0; };
+      sv('due', row.due_collection); sv('pre', row.pre_collection);
+      sv('od', row.od_collection); sv('lpf', row.lpf); sv('lpc', row.lpc);
+      const ri = tr.querySelector('input[placeholder="रिमार्क"]');
+      if (ri) ri.value = row.remark || '';
+    });
+    showToast('✅ Collection Register loaded!', 'success');
+  } catch(err) {
+    showToast('Load failed: ' + err.message, 'error');
+  }
+}
+
 function printCashBook() {
   const day = document.getElementById('cb-day')?.value || '';
   const date = document.getElementById('cb-date')?.value || '';
@@ -1856,7 +2069,9 @@ function renderCollectionRegTab() {
       </div>
       <div style="display:flex;gap:6px">
         <input type="date" id="cr-date" value="${today}" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px">
-        <button onclick="printCollReg()" style="background:var(--navy);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer">🖨️ Print</button>
+        <button onclick="loadCollReg()" style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;border-radius:8px;padding:8px 10px;font-size:12px;font-weight:700;cursor:pointer">📂 Load</button>
+        <button onclick="saveCollReg()" style="background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;border-radius:8px;padding:8px 10px;font-size:12px;font-weight:700;cursor:pointer">💾 Save</button>
+        <button onclick="printCollReg()" style="background:var(--navy);color:white;border:none;border-radius:8px;padding:8px 10px;font-size:12px;font-weight:700;cursor:pointer">🖨️ Print</button>
       </div>
     </div>
 
@@ -1886,7 +2101,7 @@ function renderCollectionRegTab() {
         </thead>
         <tbody id="cr-tbody">
           ${centers.length ? centers.map((ct,i)=>`
-          <tr style="${i%2===0?'background:#fafafa':'background:white'}">
+          <tr data-center="${ct.name}" style="${i%2===0?'background:#fafafa':'background:white'}">
             <td style="padding:6px;border:1px solid #ddd;font-weight:600">${ct.name}<br><span style="font-size:9px;color:var(--muted)">${ct.clients} clients</span></td>
             <td style="border:1px solid #ddd;padding:3px"><input type="number" data-row="${i}" data-col="due" value="${ct.due||''}" oninput="calcCR(${i})" style="width:70px;border:none;font-size:11px;text-align:right;outline:none"></td>
             <td style="border:1px solid #ddd;padding:3px"><input type="number" data-row="${i}" data-col="pre" value="${ct.pre||''}" oninput="calcCR(${i})" style="width:70px;border:none;font-size:11px;text-align:right;outline:none"></td>
@@ -2003,7 +2218,10 @@ function renderMeetingTab() {
   const todayStr = today.toISOString().slice(0,10);
   const dayName = today.toLocaleDateString('en-US', {weekday:'long'});
 
-  // Group clients by meeting day (check finance_company OR meeting_day)
+  // Selected day — default aaj ka
+  const selectedDay = window._meetingSelectedDay || dayName;
+
+  // Group clients by meeting day
   const byDay = {};
   days.forEach(d => { byDay[d] = []; });
 
@@ -2016,9 +2234,50 @@ function renderMeetingTab() {
     if (matched) byDay[matched].push(cl);
   });
 
-  let html = '';
+  // Day selector buttons
+  let daySelector = `<div style="margin-bottom:12px">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:6px;font-weight:600">📅 Meeting Day Select करें:</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">`;
 
-  days.forEach(day => {
+  days.forEach(d => {
+    const short = d.split('/')[0].trim();
+    const isSelected = selectedDay === short;
+    const isToday = dayName === short;
+    const count = byDay[d]?.length || 0;
+    daySelector += `<button onclick="window._meetingSelectedDay='${short}';switchMoreTab('meeting')" 
+      style="padding:5px 10px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;
+      background:${isSelected?'var(--navy)':isToday?'#dcfce7':'#f3f4f6'};
+      color:${isSelected?'white':isToday?'#166534':'var(--muted)'};
+      border:${isSelected?'none':isToday?'1px solid #86efac':'1px solid var(--border)'};
+      white-space:nowrap">
+      ${isToday?'⭐ ':''}${short} (${count})
+    </button>`;
+  });
+
+  daySelector += `<button onclick="window._meetingSelectedDay=null;switchMoreTab('meeting')" 
+    style="padding:5px 10px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;
+    background:#fef3c7;color:#92400e;border:1px solid #fcd34d;white-space:nowrap">
+    📋 All Days
+  </button>`;
+  daySelector += `</div></div>`;
+
+  let html = daySelector;
+
+  // Filter days based on selection
+  const daysToShow = window._meetingSelectedDay 
+    ? days.filter(d => d.split('/')[0].trim() === selectedDay)
+    : days.filter(d => d.split('/')[0].trim() === dayName); // default: aaj ka din
+
+  if (!daysToShow.some(d => byDay[d]?.length > 0)) {
+    html += `<div style="text-align:center;padding:30px;color:var(--muted)">
+      <div style="font-size:30px">📋</div>
+      <div style="font-size:14px;font-weight:700;margin-top:8px">${selectedDay} ko koi meeting nahi!</div>
+      <div style="font-size:12px;margin-top:4px">Doosra din select karein</div>
+    </div>`;
+    return `<div style="padding:8px">${html}</div>`;
+  }
+
+  daysToShow.forEach(day => {
     const clients = byDay[day];
     if (!clients.length) return;
 
@@ -2110,7 +2369,13 @@ function renderMeetingTab() {
     html += '</tr></thead><tbody>';
 
     centerClients.forEach((cl, i) => {
-      const payments = allPayments.filter(p=>p.client_id===cl.id&&p.type==='credit');
+      const loanStartDate = cl.loan_date || cl.first_emi_date || null;
+      const payments = allPayments.filter(p => {
+        if (p.client_id !== cl.id || p.type !== 'credit') return false;
+        if ((p.description||'').includes('DELETED')) return false;
+        if (loanStartDate && p.date && p.date < loanStartDate) return false;
+        return true;
+      });
       const totalPaid = payments.reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
       const loanAmt = parseFloat(cl.balance)||0;
       const intAmt = parseFloat(cl.interest_amount)||0;
@@ -2136,7 +2401,9 @@ function renderMeetingTab() {
       html += '<td style="padding:5px 4px;border:1px solid #ddd;text-align:right">'+fmt(iDue)+'</td>';
       html += '<td style="padding:5px 4px;border:1px solid #ddd;min-width:50px"></td>';
       html += '<td style="padding:5px 4px;border:1px solid #ddd;text-align:right;font-weight:700;color:green">'+fmt(emi)+'</td>';
-      html += '<td style="padding:5px 4px;border:1px solid #ddd;min-width:60px"></td>';
+      html += '<td style="padding:5px 4px;border:1px solid #ddd;text-align:center">'
+        + (outstandingP > 0 ? '<button onclick="quickPay(\''+cl.id+'\','+emi+')" style="background:#22c55e;color:white;border:none;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">💳 Pay</button>' : '<span style="color:green;font-size:11px">✅ Done</span>')
+        + '</td>';
       html += '</tr>';
     });
 
@@ -2887,15 +3154,36 @@ function showClientPassbook(clientId, showFullHistory = false) {
   db.from('loan_history').select('*').eq('client_id', clientId).order('created_at', {ascending: true}).then(({ data: history }) => {
     const historyList = history || [];
 
-    // Only show payments from current loan cycle (after loan_date)
+    // Only show payments from current loan cycle
+    // Use most recent loan_history closed_at for precise timestamp filtering
+    const lastHistory = historyList.length > 0 ? historyList[historyList.length - 1] : null;
+    const cycleStartTimestamp = lastHistory?.closed_at || null;
     const loanStartDate = cl.loan_date || cl.first_emi_date || null;
-    const payments = allPayments.filter(p => {
+
+    let payments = allPayments.filter(p => {
       if (p.client_id !== clientId) return false;
       if ((p.description||'').includes('DELETED')) return false;
       if (!(p.type === 'credit' || (p.type === 'debit' && (p.description||'').includes('Reversal')))) return false;
-      if (!showFullHistory && loanStartDate && p.date && p.date < loanStartDate) return false;
+      if (!showFullHistory) {
+        // Use exact timestamp if available
+        if (cycleStartTimestamp && p.created_at) {
+          return p.created_at >= cycleStartTimestamp;
+        }
+        // Fallback to date
+        if (loanStartDate && p.date && p.date < loanStartDate) return false;
+      }
       return true;
     }).sort((a,b) => new Date(a.date) - new Date(b.date));
+
+    // Fallback: show all if no payments in current cycle and no history
+    if (payments.length === 0 && historyList.length === 0) {
+      payments = allPayments.filter(p => {
+        if (p.client_id !== clientId) return false;
+        if ((p.description||'').includes('DELETED')) return false;
+        if (!(p.type === 'credit' || (p.type === 'debit' && (p.description||'').includes('Reversal')))) return false;
+        return true;
+      }).sort((a,b) => new Date(a.date) - new Date(b.date));
+    }
 
     const c = document.getElementById('main-content');
     if (!c) return;
@@ -2945,6 +3233,8 @@ function showClientPassbook(clientId, showFullHistory = false) {
         <div><span style="opacity:.6">DB Date:</span> <strong>${cl.loan_date||cl.first_emi_date||'—'}</strong></div>
         <div><span style="opacity:.6">Loan Amt:</span> <strong style="color:#FFD700">₹${fmt(loan)}</strong></div>
         <div><span style="opacity:.6">Interest:</span> <strong style="color:#FFD700">₹${fmt(interest)}</strong></div>
+        <div><span style="opacity:.6">LPF:</span> <strong style="color:#FFD700">₹${fmt(parseFloat(cl.lpf)||500)}</strong></div>
+        <div><span style="opacity:.6">LPC:</span> <strong style="color:#FFD700">₹${fmt(parseFloat(cl.lpc)||Math.ceil(loan/10000)*500)}</strong></div>
         <div><span style="opacity:.6">Weekly EMI:</span> <strong style="color:#FFD700">₹${fmt(weeklyEMI)}</strong></div>
         <div><span style="opacity:.6">Loan Cycle:</span> <strong>${cl.loan_cycle||'1st'}</strong></div>
         <div><span style="opacity:.6">Tenure:</span> <strong>${totalWeeks} Weeks</strong></div>
@@ -3097,19 +3387,25 @@ async function showLoanHistoryPassbook(clientId, historyIndex) {
   const h = historyList[historyIndex];
   if (!h) return;
 
-  // Get payments between this loan's start and next loan's start
-  const startDate = h.loan_date || h.first_emi_date || '';
-  const nextH = historyList[historyIndex + 1];
-  const endDate = nextH ? (nextH.loan_date || nextH.first_emi_date || '') : cl.loan_date || '';
-
-  const payments = allPayments.filter(p => {
+  // Get ALL real payments for this client in chronological order
+  const allClientPayments = allPayments.filter(p => {
     if (p.client_id !== clientId) return false;
     if ((p.description||'').includes('DELETED')) return false;
     if (!(p.type === 'credit' || (p.type === 'debit' && (p.description||'').includes('Reversal')))) return false;
-    if (startDate && p.date < startDate) return false;
-    if (endDate && p.date >= endDate) return false;
     return true;
-  }).sort((a,b) => new Date(a.date) - new Date(b.date));
+  }).sort((a,b) => new Date(a.created_at||a.date) - new Date(b.created_at||b.date));
+
+  // Calculate cumulative payment counts from history
+  let startCount = 0;
+  for (let i = 0; i < historyIndex; i++) {
+    startCount += parseInt(historyList[i].payment_count) || 0;
+  }
+  const endCount = startCount + (parseInt(h.payment_count) || 0);
+  
+  // Slice payments for this cycle
+  const payments = endCount > startCount 
+    ? allClientPayments.slice(startCount, endCount)
+    : allClientPayments.slice(startCount, startCount + (parseInt(h.loan_weeks)||12));
 
   const loan = parseFloat(h.balance) || 0;
   const interest = parseFloat(h.interest_amount) || 0;
@@ -3262,7 +3558,13 @@ function printMeetingSheet() {
 
     let rows = '';
     centerClients.forEach((cl, i) => {
-      const payments = allPayments.filter(p=>p.client_id===cl.id&&p.type==='credit');
+      const loanStartDate = cl.loan_date || cl.first_emi_date || null;
+      const payments = allPayments.filter(p => {
+        if (p.client_id !== cl.id || p.type !== 'credit') return false;
+        if ((p.description||'').includes('DELETED')) return false;
+        if (loanStartDate && p.date && p.date < loanStartDate) return false;
+        return true;
+      });
       const loanAmt = parseFloat(cl.balance)||0;
       const intAmt = parseFloat(cl.interest_amount)||0;
       const outP = Math.max(0, loanAmt - payments.length * Math.round(loanAmt/(parseInt(cl.loan_weeks)||12)));
@@ -3543,14 +3845,20 @@ function showMeetingDay() {
                 </thead>
                 <tbody>
                   ${centerClients.map((cl, i) => {
-                    const payments = allPayments.filter(p=>p.client_id===cl.id&&p.type==='credit');
+                    const loanStartDate = cl.loan_date || cl.first_emi_date || null;
+                    const payments = allPayments.filter(p => {
+                      if (p.client_id !== cl.id || p.type !== 'credit') return false;
+                      if ((p.description||'').includes('DELETED')) return false;
+                      if (loanStartDate && p.date && p.date < loanStartDate) return false;
+                      return true;
+                    });
                     const totalPaid = payments.reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
                     const loanAmt = parseFloat(cl.balance)||0;
                     const intAmt = parseFloat(cl.interest_amount)||0;
                     const totalDue = loanAmt + intAmt;
                     const outstanding = Math.max(0, totalDue - totalPaid);
-                    const outstandingP = Math.max(0, loanAmt - payments.filter(p=>p.client_id===cl.id).length * Math.round(loanAmt/(parseInt(cl.loan_weeks)||12)));
-                    const outstandingI = Math.max(0, intAmt - payments.filter(p=>p.client_id===cl.id).length * Math.round(intAmt/(parseInt(cl.loan_weeks)||12)));
+                    const outstandingP = Math.max(0, loanAmt - payments.length * Math.round(loanAmt/(parseInt(cl.loan_weeks)||12)));
+                    const outstandingI = Math.max(0, intAmt - payments.length * Math.round(intAmt/(parseInt(cl.loan_weeks)||12)));
                     const weeklyEMI = Math.round(totalDue/(parseInt(cl.loan_weeks)||12));
                     const weeklyP = Math.round(loanAmt/(parseInt(cl.loan_weeks)||12));
                     const weeklyI = Math.round(intAmt/(parseInt(cl.loan_weeks)||12));
