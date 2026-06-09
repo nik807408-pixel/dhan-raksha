@@ -229,47 +229,105 @@ function renderDashboard(c) {
   const vipClients = allClients.filter(x => x.status === 'vip').length;
 
   c.innerHTML = `
-    <div style="margin-bottom:16px">
-      <div style="font-size:18px;font-weight:700;color:var(--navy)">नमस्ते, ${currentProfile.name?.split(' ')[0]} 👋</div>
-      <div style="font-size:12px;color:var(--muted)">Your finance overview / आपका वित्त सारांश</div>
-    </div>
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-label"><span class="hindi-label">कुल ग्राहक</span>Total Clients</div>
-        <div class="stat-val gold">${allClients.length}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label"><span class="hindi-label">कुल बैलेंस</span>Total Balance</div>
-        <div class="stat-val green">₹${fmt(totalBal)}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label"><span class="hindi-label">कुल प्राप्त</span>Total Received</div>
-        <div class="stat-val" style="color:var(--navy2)">₹${fmt(totalPaid)}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label"><span class="hindi-label">कुल ब्याज</span>Total Interest</div>
-        <div class="stat-val purple">₹${fmt(allClients.reduce((s,c)=>s+(parseFloat(c.interest_amount)||0),0))}</div>
-      </div>
+    <!-- Welcome Header -->
+    <div style="background:linear-gradient(135deg,#1a2e4a,#2d4a7a);border-radius:16px;padding:16px;margin-bottom:16px;color:white">
+      <div style="font-size:20px;font-weight:800">नमस्ते, ${currentProfile.name?.split(' ')[0]} 👋</div>
+      <div style="font-size:11px;opacity:.7;margin-top:2px">आपका वित्त सारांश — Your Finance Overview</div>
+      <div style="font-size:11px;opacity:.7;margin-top:2px">${new Date().toLocaleDateString('hi-IN',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</div>
     </div>
 
+    <!-- Stats Grid Minimal Clean -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+
+      <div style="background:white;border-radius:14px;padding:14px;box-shadow:0 2px 10px rgba(15,37,71,.08);border-left:4px solid #f59e0b">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="font-size:22px">👥</div>
+          <div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase">कुल ग्राहक</div>
+        </div>
+        <div style="font-size:24px;font-weight:800;color:#f59e0b">${allClients.filter(c=>c.status!=='closed').length}</div>
+        <div style="font-size:10px;color:var(--muted)">Active / ${allClients.length} Total</div>
+      </div>
+
+      <div style="background:white;border-radius:14px;padding:14px;box-shadow:0 2px 10px rgba(15,37,71,.08);border-left:4px solid #10b981">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="font-size:22px">💰</div>
+          <div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase">कुल लोन</div>
+        </div>
+        <div style="font-size:20px;font-weight:800;color:#10b981">₹${fmt(totalBal)}</div>
+        <div style="font-size:10px;color:var(--muted)">Total Balance</div>
+      </div>
+
+      <div style="background:white;border-radius:14px;padding:14px;box-shadow:0 2px 10px rgba(15,37,71,.08);border-left:4px solid #3b82f6">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="font-size:22px">✅</div>
+          <div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase">कुल प्राप्त</div>
+        </div>
+        <div style="font-size:20px;font-weight:800;color:#3b82f6">₹${fmt(totalPaid)}</div>
+        <div style="font-size:10px;color:var(--muted)">Total Received</div>
+      </div>
+
+      <div style="background:white;border-radius:14px;padding:14px;box-shadow:0 2px 10px rgba(15,37,71,.08);border-left:4px solid #8b5cf6">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="font-size:22px">💹</div>
+          <div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase">कुल ब्याज</div>
+        </div>
+        <div style="font-size:20px;font-weight:800;color:#8b5cf6">₹${fmt(allClients.reduce((s,c)=>s+(parseFloat(c.interest_amount)||0),0))}</div>
+        <div style="font-size:10px;color:var(--muted)">Total Interest</div>
+      </div>
+
+      <div style="background:white;border-radius:14px;padding:14px;box-shadow:0 2px 10px rgba(15,37,71,.08);border-left:4px solid #f43f5e">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="font-size:22px">📊</div>
+          <div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase">बाकी</div>
+        </div>
+        <div style="font-size:20px;font-weight:800;color:#f43f5e">₹${fmt(Math.max(0,totalBal+allClients.reduce((s,c)=>s+(parseFloat(c.interest_amount)||0),0)-totalPaid))}</div>
+        <div style="font-size:10px;color:var(--muted)">Outstanding</div>
+      </div>
+
+      <div style="background:white;border-radius:14px;padding:14px;box-shadow:0 2px 10px rgba(15,37,71,.08);border-left:4px solid #0891b2">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="font-size:22px">🏷️</div>
+          <div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase">कुल LPF</div>
+        </div>
+        <div style="font-size:20px;font-weight:800;color:#0891b2">₹${fmt(allClients.filter(c=>c.status!=='closed').reduce((s,c)=>s+(parseFloat(c.lpf)||500),0))}</div>
+        <div style="font-size:10px;color:var(--muted)">Total LPF</div>
+      </div>
+
+      <div style="background:white;border-radius:14px;padding:14px;box-shadow:0 2px 10px rgba(15,37,71,.08);border-left:4px solid #d97706;grid-column:1/-1">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="font-size:22px">📋</div>
+          <div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase">कुल LPC</div>
+        </div>
+        <div style="font-size:22px;font-weight:800;color:#d97706">₹${fmt(allClients.filter(c=>c.status!=='closed').reduce((s,c)=>s+(parseFloat(c.lpc)||Math.ceil((parseFloat(c.balance)||0)/10000)*500),0))}</div>
+        <div style="font-size:10px;color:var(--muted)">Total LPC</div>
+      </div>
+
+    </div>
+
+    <!-- Chart -->
     <div class="chart-card">
       <div class="chart-title">📊 Client Balance Overview <span class="hindi">/ ग्राहक बैलेंस</span></div>
       <canvas id="balanceChart" height="180"></canvas>
     </div>
 
-    <div class="chart-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div class="chart-title" style="margin:0">💰 Payment History / भुगतान इतिहास</div>
-        <button onclick="exportPaymentsExcel()" style="background:var(--success);color:white;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer">📥 Export Excel</button>
+    <!-- Payment History - Collapsible -->
+    <div class="chart-card" style="padding:0;overflow:hidden">
+      <div onclick="togglePaymentHistory()" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;cursor:pointer;background:var(--navy);color:white;border-radius:12px" id="ph-header">
+        <div style="font-weight:700;font-size:14px">💰 Payment History / भुगतान इतिहास</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button onclick="event.stopPropagation();exportPaymentsExcel()" style="background:rgba(255,255,255,.2);color:white;border:none;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;cursor:pointer">📥 Excel</button>
+          <span id="ph-toggle-icon" style="font-size:16px">▼</span>
+        </div>
       </div>
-      <!-- Client Search -->
-      <div style="margin-bottom:10px;display:flex;gap:8px;align-items:center">
-        <input type="text" id="ph-client-search" placeholder="🔍 Client name search करें..." 
-          oninput="filterPaymentHistory(this.value)"
-          style="flex:1;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12px;color:var(--navy)">
-      </div>
-      ${!allPayments || allPayments.length === 0 ? '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No payments yet / कोई भुगतान नहीं<br><span style="font-size:11px">Client पर click करके payment add करें</span></div>' :
-      `<div style="overflow-x:auto">
+      <div id="ph-body" style="display:none;padding:12px">
+        <div style="margin-bottom:10px;display:flex;gap:6px;align-items:center">
+          <input type="text" id="ph-client-search" placeholder="🔍 Client name search करें..." 
+            oninput="filterPaymentHistory(this.value)"
+            style="flex:1;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12px;color:var(--navy)">
+          <button id="mic-btn-ph-client-search" onclick="voiceSearch('ph-client-search', filterPaymentHistory)" style="padding:6px 10px;background:#f0f4ff;border:1px solid #c7d2fe;border-radius:8px;font-size:14px;cursor:pointer">🎤</button>
+        </div>
+        ${!allPayments || allPayments.length === 0 ? '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No payments yet</div>' :
+        `<div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead>
             <tr style="background:var(--navy);color:white">
@@ -310,6 +368,7 @@ function renderDashboard(c) {
         </table>
         ${allPayments.length > 50 ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--muted)">Showing 50 of ${allPayments.length} payments</div>` : ''}
       </div>`}
+      </div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
@@ -478,6 +537,19 @@ function openAddClient() {
     populateAssign();
   }
   openModal('client-modal');
+  // Add mic to notes field
+  setTimeout(() => {
+    const notesEl = document.getElementById('f-notes');
+    if (notesEl && !document.getElementById('mic-btn-f-notes')) {
+      const micBtn = document.createElement('button');
+      micBtn.id = 'mic-btn-f-notes';
+      micBtn.type = 'button';
+      micBtn.textContent = '🎤 Note बोलें';
+      micBtn.style.cssText = 'margin-top:4px;padding:6px 12px;background:#f0f4ff;border:1px solid #c7d2fe;border-radius:8px;font-size:12px;cursor:pointer;width:100%';
+      micBtn.onclick = () => voiceNote('f-notes');
+      notesEl.parentNode.insertBefore(micBtn, notesEl.nextSibling);
+    }
+  }, 300);
 }
 
 function openEditClient(c) {
@@ -1170,6 +1242,34 @@ function openPayModal() {
   document.getElementById('pay-amt').value = '';
   document.getElementById('pay-type').value = 'credit';
   openModal('pay-modal');
+
+  // Add mic buttons dynamically
+  setTimeout(() => {
+    // Mic for amount
+    const amtEl = document.getElementById('pay-amt');
+    if (amtEl && !document.getElementById('mic-btn-pay-amt')) {
+      const micBtn = document.createElement('button');
+      micBtn.id = 'mic-btn-pay-amt';
+      micBtn.type = 'button';
+      micBtn.textContent = '🎤';
+      micBtn.title = 'Voice amount';
+      micBtn.style.cssText = 'margin-left:6px;padding:6px 10px;background:#f0f4ff;border:1px solid #c7d2fe;border-radius:8px;font-size:14px;cursor:pointer;';
+      micBtn.onclick = () => voiceAmount('pay-amt');
+      amtEl.parentNode.insertBefore(micBtn, amtEl.nextSibling);
+    }
+    // Mic for description/notes
+    const descEl = document.getElementById('pay-desc');
+    if (descEl && !document.getElementById('mic-btn-pay-desc')) {
+      const micBtn2 = document.createElement('button');
+      micBtn2.id = 'mic-btn-pay-desc';
+      micBtn2.type = 'button';
+      micBtn2.textContent = '🎤';
+      micBtn2.title = 'Voice note';
+      micBtn2.style.cssText = 'margin-left:6px;padding:6px 10px;background:#f0f4ff;border:1px solid #c7d2fe;border-radius:8px;font-size:14px;cursor:pointer;';
+      micBtn2.onclick = () => voiceNote('pay-desc');
+      descEl.parentNode.insertBefore(micBtn2, descEl.nextSibling);
+    }
+  }, 200);
 }
 
 async function savePayment() {
@@ -1216,30 +1316,63 @@ async function savePayment() {
 }
 
 // ── MORE PAGE ────────────────────────────
-let moreTab = 'emi';
+let moreTab = null;
 
 function renderInvoicesPage(c) {
   c.innerHTML = `
-    <div class="no-print" style="margin-bottom:16px">
-      <div style="font-size:18px;font-weight:700;color:var(--navy)">☰ More / अधिक</div>
-      <div style="font-size:12px;color:var(--muted)">EMI, Passbook & Meeting Day</div>
+  <div class="no-print" style="margin-bottom:16px">
+    <div style="font-size:18px;font-weight:700;color:var(--navy)">☰ More / अधिक</div>
+    <div style="font-size:12px;color:var(--muted)">सभी सुविधाएं</div>
+  </div>
+
+  ${moreTab ? `
+  <div class="no-print" style="margin-bottom:12px">
+    <button onclick="moreTab=null;showPage('invoices')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;color:var(--muted)">← वापस / Back</button>
+  </div>
+  <div id="more-content">
+    ${moreTab==='emi' ? renderEMITab() : moreTab==='passbook' ? renderPassbookTab() : moreTab==='cashbook' ? renderCashBookTab() : moreTab==='collreg' ? renderCollectionRegTab() : moreTab==='clients' ? renderClientsTab() : renderMeetingTab()}
+  </div>
+  ` : `
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:4px">
+
+    <div onclick="moreTab='emi';showPage('invoices')" style="background:linear-gradient(135deg,#1a2e4a,#2d4a7a);border-radius:16px;padding:20px;cursor:pointer;color:white;text-align:center;box-shadow:0 4px 12px rgba(26,46,74,.3)">
+      <div style="font-size:32px;margin-bottom:8px">📅</div>
+      <div style="font-size:14px;font-weight:700">EMI Tracker</div>
+      <div style="font-size:10px;opacity:.7;margin-top:2px">किस्त ट्रैकर</div>
     </div>
 
-    <!-- Tabs Row 1 -->
-    <div class="tabs no-print" style="margin-bottom:6px">
-      <button class="tab ${moreTab==='emi'?'active':''}" onclick="switchMoreTab('emi',this)" style="flex:1">📅 EMI</button>
-      <button class="tab ${moreTab==='passbook'?'active':''}" onclick="switchMoreTab('passbook',this)" style="flex:1">📒 Passbook</button>
-      <button class="tab ${moreTab==='meeting'?'active':''}" onclick="switchMoreTab('meeting',this)" style="flex:1">🏘️ Meeting</button>
-    </div>
-    <!-- Tabs Row 2 -->
-    <div class="tabs no-print" style="margin-bottom:16px">
-      <button class="tab ${moreTab==='cashbook'?'active':''}" onclick="switchMoreTab('cashbook',this)" style="flex:1">🧾 Cash Book</button>
-      <button class="tab ${moreTab==='collreg'?'active':''}" onclick="switchMoreTab('collreg',this)" style="flex:1">📋 Collection Reg</button>
+    <div onclick="moreTab='passbook';showPage('invoices')" style="background:linear-gradient(135deg,#065f46,#047857);border-radius:16px;padding:20px;cursor:pointer;color:white;text-align:center;box-shadow:0 4px 12px rgba(6,95,70,.3)">
+      <div style="font-size:32px;margin-bottom:8px">📒</div>
+      <div style="font-size:14px;font-weight:700">Passbook</div>
+      <div style="font-size:10px;opacity:.7;margin-top:2px">पासबुक</div>
     </div>
 
-    <div id="more-content">
-      ${moreTab==='emi' ? renderEMITab() : moreTab==='passbook' ? renderPassbookTab() : moreTab==='cashbook' ? renderCashBookTab() : moreTab==='collreg' ? renderCollectionRegTab() : renderMeetingTab()}
+    <div onclick="moreTab='meeting';showPage('invoices')" style="background:linear-gradient(135deg,#7c2d12,#c2410c);border-radius:16px;padding:20px;cursor:pointer;color:white;text-align:center;box-shadow:0 4px 12px rgba(124,45,18,.3)">
+      <div style="font-size:32px;margin-bottom:8px">🏘️</div>
+      <div style="font-size:14px;font-weight:700">Meeting Day</div>
+      <div style="font-size:10px;opacity:.7;margin-top:2px">मीटिंग दिन</div>
     </div>
+
+    <div onclick="moreTab='clients';showPage('invoices')" style="background:linear-gradient(135deg,#4c1d95,#6d28d9);border-radius:16px;padding:20px;cursor:pointer;color:white;text-align:center;box-shadow:0 4px 12px rgba(76,29,149,.3)">
+      <div style="font-size:32px;margin-bottom:8px">👤</div>
+      <div style="font-size:14px;font-weight:700">ग्राहक</div>
+      <div style="font-size:10px;opacity:.7;margin-top:2px">Clients</div>
+    </div>
+
+    <div onclick="moreTab='cashbook';showPage('invoices')" style="background:linear-gradient(135deg,#1e3a5f,#1d4ed8);border-radius:16px;padding:20px;cursor:pointer;color:white;text-align:center;box-shadow:0 4px 12px rgba(29,78,216,.3)">
+      <div style="font-size:32px;margin-bottom:8px">🧾</div>
+      <div style="font-size:14px;font-weight:700">Cash Book</div>
+      <div style="font-size:10px;opacity:.7;margin-top:2px">नकद बही</div>
+    </div>
+
+    <div onclick="moreTab='collreg';showPage('invoices')" style="background:linear-gradient(135deg,#854d0e,#ca8a04);border-radius:16px;padding:20px;cursor:pointer;color:white;text-align:center;box-shadow:0 4px 12px rgba(133,77,14,.3)">
+      <div style="font-size:32px;margin-bottom:8px">📋</div>
+      <div style="font-size:14px;font-weight:700">Collection Reg</div>
+      <div style="font-size:10px;opacity:.7;margin-top:2px">संग्रह रजिस्टर</div>
+    </div>
+
+  </div>
+  `}
   `;
 }
 
@@ -1248,7 +1381,24 @@ function switchMoreTab(tab, btn) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   if (btn) btn.classList.add('active');
   const c = document.getElementById('more-content');
-  if (c) c.innerHTML = tab==='emi' ? renderEMITab() : tab==='passbook' ? renderPassbookTab() : tab==='cashbook' ? renderCashBookTab() : tab==='collreg' ? renderCollectionRegTab() : renderMeetingTab();
+  if (c) c.innerHTML = tab==='emi' ? renderEMITab() : tab==='passbook' ? renderPassbookTab() : tab==='cashbook' ? renderCashBookTab() : tab==='collreg' ? renderCollectionRegTab() : tab==='clients' ? renderClientsTab() : renderMeetingTab();
+}
+
+function renderClientsTab() {
+  return `
+    <div>
+      <input class="search-bar" id="search-inp" placeholder="🔍 नाम, फोन खोजें…" oninput="filterClients()"/>
+      <div class="tabs" style="margin-bottom:10px">
+        <button class="tab active" onclick="filterByStatus('all',this)">सभी (${allClients.length})</button>
+        <button class="tab" onclick="filterByStatus('active',this)">Active (${allClients.filter(x=>x.status==='active').length})</button>
+        <button class="tab" onclick="filterByStatus('closed',this)" style="color:#dc2626">🔒 Closed (${allClients.filter(x=>x.status==='closed').length})</button>
+        <button class="tab" onclick="filterByStatus('inactive',this)">Inactive (${allClients.filter(x=>x.status==='inactive').length})</button>
+      </div>
+      <div style="margin-bottom:10px;text-align:right">
+        <button onclick="openAddClient()" style="background:var(--navy);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer">+ ग्राहक जोड़ें</button>
+      </div>
+      <div id="client-list">${allClients.map(clientCard).join('') || emptyState('👤','No clients yet / अभी कोई ग्राहक नहीं')}</div>
+    </div>`;
 }
 
 // ── EMI TAB ───────────────────────────────
@@ -1377,7 +1527,10 @@ function renderEMITab() {
       </div>
     </div>
 
-    <input class="search-bar" id="emi-search" placeholder="🔍 ग्राहक खोजें..." oninput="filterEMIList()"/>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
+      <input class="search-bar" id="emi-search" placeholder="🔍 ग्राहक खोजें..." oninput="filterEMIList()" style="flex:1;margin:0"/>
+      <button id="mic-btn-emi-search" onclick="voiceSearch('emi-search', filterEMIList)" style="padding:6px 10px;background:#f0f4ff;border:1px solid #c7d2fe;border-radius:8px;font-size:14px;cursor:pointer">🎤</button>
+    </div>
 
     <div class="tabs" style="margin-bottom:12px">
       <button class="tab active" onclick="filterEMITab('all',this)">सभी</button>
@@ -1400,7 +1553,14 @@ function renderPassbookTab() {
   const clients = allClients;
   if (clients.length === 0) return emptyState('📒','No clients yet');
   
-  let html = '<div style="margin-bottom:12px"><div style="font-size:13px;font-weight:700;color:var(--navy)">📒 Client चुनें</div></div>';
+  let html = `
+  <div style="margin-bottom:12px;display:flex;gap:6px;align-items:center">
+    <input class="search-bar" id="passbook-search-more" placeholder="🔍 Client naam ya phone खोजें..." 
+      oninput="filterPassbookMore(this.value)"
+      style="flex:1;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--navy);outline:none">
+    <button id="mic-btn-passbook-search-more" onclick="voiceSearch('passbook-search-more', filterPassbookMore)" style="padding:8px 12px;background:#f0f4ff;border:1px solid #c7d2fe;border-radius:10px;font-size:16px;cursor:pointer">🎤</button>
+  </div>
+  <div id="passbook-client-list-more">`;
   
   clients.forEach(cl => {
     const payments = allPayments.filter(p => p.client_id === cl.id && p.type === 'credit');
@@ -1410,16 +1570,25 @@ function renderPassbookTab() {
     const outstanding = Math.max(0, (loan+interest) - totalPaid);
     const initials = cl.name?.charAt(0).toUpperCase() || '?';
     const photoHtml = cl.photo_url ? '<img src="'+cl.photo_url+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>' : initials;
+    const isClosed = cl.status === 'closed';
     
-    html += '<div data-cid="'+cl.id+'" onclick="passbookOpen(this)" style="background:white;border-radius:12px;padding:12px;margin-bottom:10px;box-shadow:0 2px 8px rgba(15,37,71,.07);display:flex;align-items:center;gap:12px;cursor:pointer">';
-    html += '<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--navy),var(--navy2));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;color:var(--gold);flex-shrink:0;overflow:hidden">'+photoHtml+'</div>';
-    html += '<div style="flex:1"><div style="font-weight:700;font-size:14px;color:var(--navy)">'+cl.name+'</div>';
-    html += '<div style="font-size:11px;color:var(--muted)">'+(cl.customer_id||'')+' · '+(cl.center_name||'')+'</div>';
-    html += '<div style="font-size:11px;color:var(--muted)">'+payments.length+' payments</div></div>';
-    html += '<div style="text-align:right"><div style="font-weight:700;color:var(--danger);font-size:13px">₹'+fmt(outstanding)+'</div>';
-    html += '<div style="font-size:10px;color:var(--muted)">outstanding</div></div></div>';
+    html += `<div data-cid="${cl.id}" data-name="${cl.name.toLowerCase()}" data-phone="${cl.phone||''}" 
+      onclick="passbookOpen(this)" 
+      style="background:white;border-radius:12px;padding:12px;margin-bottom:10px;box-shadow:0 2px 8px rgba(15,37,71,.07);display:flex;align-items:center;gap:12px;cursor:pointer;${isClosed?'opacity:0.6':''}">
+      <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--navy),var(--navy2));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;color:var(--gold);flex-shrink:0;overflow:hidden">${photoHtml}</div>
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:14px;color:var(--navy)">${cl.name} ${isClosed?'🔒':''}</div>
+        <div style="font-size:11px;color:var(--muted)">${cl.customer_id||''} · ${cl.center_name||''}</div>
+        <div style="font-size:11px;color:var(--muted)">${payments.length} payments</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-weight:700;color:${isClosed?'var(--success)':'var(--danger)'};font-size:13px">₹${fmt(outstanding)}</div>
+        <div style="font-size:10px;color:var(--muted)">${isClosed?'Closed':'outstanding'}</div>
+      </div>
+    </div>`;
   });
   
+  html += '</div>';
   return html;
 }
 
@@ -1481,6 +1650,33 @@ function hindiToRoman(text) {
   });
   return result.toLowerCase().replace(/[^a-z0-9\s]/g, '');
 }
+
+function filterPassbookMore(q) {
+  const query = (q||'').toLowerCase().trim();
+  const rows = document.querySelectorAll('#passbook-client-list-more [data-cid]');
+  rows.forEach(row => {
+    const name = (row.dataset.name||'').toLowerCase();
+    const phone = (row.dataset.phone||'');
+    const nameRoman = hindiToRoman(row.dataset.name||'');
+    const show = !query || name.includes(query) || phone.includes(query) || nameRoman.includes(query);
+    row.style.display = show ? '' : 'none';
+  });
+}
+
+
+function togglePaymentHistory() {
+  const body = document.getElementById('ph-body');
+  const icon = document.getElementById('ph-toggle-icon');
+  if (!body) return;
+  if (body.style.display === 'none') {
+    body.style.display = 'block';
+    if (icon) icon.textContent = '▲';
+  } else {
+    body.style.display = 'none';
+    if (icon) icon.textContent = '▼';
+  }
+}
+
 
 function filterPaymentHistory(searchQ) {
   const q = (searchQ || '').trim().toLowerCase();
@@ -1888,7 +2084,78 @@ function autoCalcLPFLPC() {
   if (lpcEl) lpcEl.value = lpc;
 }
 
-// ── CASH BOOK SAVE/LOAD ────────────────────────────────────────────────────
+// ── VOICE / MIC SUPPORT ──────────────────────────────────────────────────
+function startVoice(targetId, onResult, lang = 'hi-IN') {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showToast('Browser mic support nahi hai! Chrome use karein.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('mic-btn-' + targetId);
+  if (btn) { btn.textContent = '🔴'; btn.style.animation = 'pulse 1s infinite'; }
+
+  const recognition = new SpeechRecognition();
+  recognition.lang = lang;
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  recognition.onresult = (e) => {
+    const transcript = e.results[0][0].transcript.trim();
+    if (btn) { btn.textContent = '🎤'; btn.style.animation = ''; }
+    if (onResult) onResult(transcript);
+  };
+
+  recognition.onerror = (e) => {
+    if (btn) { btn.textContent = '🎤'; btn.style.animation = ''; }
+    showToast('Mic error: ' + e.error, 'error');
+  };
+
+  recognition.onend = () => {
+    if (btn) { btn.textContent = '🎤'; btn.style.animation = ''; }
+  };
+
+  recognition.start();
+  showToast('🎤 Bol rahe hain... sunna shuru!', 'success');
+}
+
+function voiceAmount(targetId) {
+  startVoice(targetId, (text) => {
+    // Extract number from Hindi/English speech
+    let num = text.replace(/[^\d]/g, '');
+    // Hindi words to numbers
+    const words = { 'सौ': 100, 'पांच सौ': 500, 'हजार': 1000, 'एक हजार': 1000,
+      'दो हजार': 2000, 'पांच हजार': 5000, 'दस हजार': 10000 };
+    Object.entries(words).forEach(([w, v]) => {
+      if (text.includes(w)) num = v;
+    });
+    const el = document.getElementById(targetId);
+    if (el && num) { el.value = num; el.dispatchEvent(new Event('input')); }
+    showToast(`💰 Amount: ₹${num}`, 'success');
+  });
+}
+
+function voiceSearch(targetId, filterFn) {
+  startVoice(targetId, (text) => {
+    const el = document.getElementById(targetId);
+    if (el) { el.value = text; el.dispatchEvent(new Event('input')); }
+    if (filterFn) filterFn(text);
+    showToast(`🔍 Searching: "${text}"`, 'success');
+  });
+}
+
+function voiceNote(targetId) {
+  startVoice(targetId, (text) => {
+    const el = document.getElementById(targetId);
+    if (el) {
+      el.value = (el.value ? el.value + ' ' : '') + text;
+      el.dispatchEvent(new Event('input'));
+    }
+    showToast(`📝 Note added: "${text}"`, 'success');
+  });
+}
+
+
 async function saveCashBook() {
   const date = document.getElementById('cb-date')?.value;
   if (!date) { showToast('Date daalo pehle!', 'error'); return; }
