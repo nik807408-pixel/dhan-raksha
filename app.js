@@ -1246,7 +1246,7 @@ function renderInvoicesPage(c) {
 function switchMoreTab(tab, btn) {
   moreTab = tab;
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
+  if (btn) btn.classList.add('active');
   const c = document.getElementById('more-content');
   if (c) c.innerHTML = tab==='emi' ? renderEMITab() : tab==='passbook' ? renderPassbookTab() : tab==='cashbook' ? renderCashBookTab() : tab==='collreg' ? renderCollectionRegTab() : renderMeetingTab();
 }
