@@ -129,6 +129,15 @@ async function initDemoApp() {
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
 
+  // Demo = READ-ONLY banner (DB writes RLS se blocked hain)
+  if (!document.getElementById('demo-banner')) {
+    const b = document.createElement('div');
+    b.id = 'demo-banner';
+    b.style.cssText = 'background:linear-gradient(90deg,#d97706,#f59e0b);color:white;text-align:center;font-size:11px;font-weight:700;padding:5px 8px';
+    b.textContent = '👁️ DEMO MODE — View Only / केवल देखने के लिए। Full access ke liye sampark karein.';
+    document.getElementById('app').prepend(b);
+  }
+
   document.getElementById('uname').textContent = 'Demo';
   const rp = document.getElementById('urole');
   rp.textContent = 'Admin';
@@ -2346,6 +2355,25 @@ async function loadCollReg() {
   }
 }
 
+// Print fix: innerHTML me typed input values nahi aate (isi se 00 dikhta tha).
+function getPrintableHTML(areaId) {
+  const area = document.getElementById(areaId);
+  if (!area) return '';
+  const clone = area.cloneNode(true);
+  const orig = area.querySelectorAll('input, select, textarea');
+  const cl = clone.querySelectorAll('input, select, textarea');
+  orig.forEach((inp, i) => {
+    const span = document.createElement('span');
+    span.textContent = inp.tagName === 'SELECT'
+      ? (inp.options[inp.selectedIndex]?.text || '')
+      : (inp.value || '');
+    span.style.cssText = 'display:inline-block;width:100%;text-align:' + (inp.style.textAlign || 'left');
+    if (cl[i]) cl[i].replaceWith(span);
+  });
+  clone.querySelectorAll('button').forEach(b => b.remove());
+  return clone.innerHTML;
+}
+
 function printCashBook() {
   const day = document.getElementById('cb-day')?.value || '';
   const date = document.getElementById('cb-date')?.value || '';
@@ -2358,7 +2386,7 @@ function printCashBook() {
   @media print{@page{margin:10mm}}</style></head><body>
   <h2 style="text-align:center;margin-bottom:4px">धन रक्षा Finance — Cash Book</h2>
   <p style="text-align:center;font-size:12px;margin-top:0">Day: <b>${day}</b> &nbsp; Date: <b>${date}</b></p>
-  ${area.innerHTML}</body></html>`;
+  ${getPrintableHTML('cashbook-print-area')}</body></html>`;
   const w = window.open('','_blank');
   w.document.write(html);
   w.document.close();
@@ -2540,7 +2568,7 @@ function printCollReg() {
   table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:5px;font-size:10px}
   th{background:#1a2e4a;color:white}input{border:none;font-size:10px;width:100%}
   button{display:none}@media print{@page{size:landscape;margin:8mm}}</style>
-  </head><body>${area.innerHTML}</body></html>`;
+  </head><body>${getPrintableHTML('collreg-print-area')}</body></html>`;
   const w = window.open('','_blank');
   w.document.write(html);
   w.document.close();
@@ -3315,15 +3343,12 @@ function openApproveModal(id, name, email) {
   approvingEmployeeId = id;
   const info = document.getElementById('approve-emp-info');
   if (info) info.innerHTML = `<strong>${name}</strong><br><span style="color:var(--muted)">${email}</span>`;
-  document.getElementById('approve-password').value = '';
   document.getElementById('approve-admin-pass').value = '';
   openModal('approve-modal');
 }
 
 async function approveEmployee() {
-  const newPass = document.getElementById('approve-password').value.trim();
   const adminPass = document.getElementById('approve-admin-pass').value;
-  if (!newPass) { showToast('Enter employee password', 'error'); return; }
   if (!adminPass) { showToast('Enter your admin password', 'error'); return; }
 
   const { error: authErr } = await db.auth.signInWithPassword({
@@ -3331,9 +3356,10 @@ async function approveEmployee() {
   });
   if (authErr) { showToast('Wrong admin password! / गलत पासवर्ड!', 'error'); return; }
 
-  await db.from('profiles').update({
-    is_approved: true, approved_by: currentUser.id, login_password: newPass
+  const { error: updErr } = await db.from('profiles').update({
+    is_approved: true, approved_by: currentUser.id
   }).eq('id', approvingEmployeeId);
+  if (updErr) { showToast('Approve failed: ' + updErr.message, 'error'); return; }
 
   closeModal('approve-modal');
   showToast('Employee approved! ✅', 'success');
