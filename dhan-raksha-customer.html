@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0f2547">
+<title>Dhan Raksha — ग्राहक पासबुक</title>
+<link rel="icon" href="icon-192.svg"/>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :root{--navy:#0f2547;--navy2:#1a3a6b;--maroon:#8b1a1a;--gold:#fbbf24;--bg:#f4f6f9;--text:#1a1a1a;--muted:#64748b;--border:#e2e8f0;--success:#16a34a;--danger:#dc2626}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:74px}
+  .wrap{max-width:480px;margin:0 auto}
+  #login-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:linear-gradient(160deg,#0a0a0a,#1f1f1f)}
+  #login-screen img{width:120px;height:auto;margin-bottom:18px}
+  .login-card{background:white;border-radius:20px;padding:26px 22px;width:100%;max-width:380px;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+  .login-card h1{font-size:18px;color:var(--navy);text-align:center;margin-bottom:4px}
+  .login-card .sub{font-size:12px;color:var(--muted);text-align:center;margin-bottom:20px}
+  .login-card label{font-size:12px;font-weight:600;color:var(--navy);display:block;margin-bottom:5px}
+  .login-card input{width:100%;border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;font-size:15px;margin-bottom:14px}
+  .login-card input:focus{outline:none;border-color:var(--navy)}
+  .login-btn{width:100%;background:linear-gradient(135deg,var(--navy),var(--navy2));color:white;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer}
+  .login-err{background:#fef2f2;color:var(--danger);font-size:12.5px;padding:10px 12px;border-radius:8px;margin-bottom:12px;display:none}
+  .topbar{background:white;color:var(--maroon);padding:14px 18px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+  .topbar .back{font-size:22px;cursor:pointer;color:var(--maroon);background:none;border:none;display:none}
+  .topbar .ttl{font-size:20px;font-weight:700;font-family:Georgia,serif}
+  .topbar img{width:34px;height:34px;border-radius:7px;margin-left:auto}
+  .page{display:none;padding:14px}
+  .page.active{display:block}
+  .loan-card{background:white;border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:0 2px 10px rgba(15,37,71,.08)}
+  .loan-card .lc-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .loan-card .lc-type{font-size:15px;font-weight:700;color:var(--navy)}
+  .loan-card .lc-id{font-size:14px;font-weight:700;color:var(--maroon)}
+  .loan-card .lc-body{display:flex;gap:10px}
+  .loan-card .lc-amt{flex:1;background:#64748b;color:white;border-radius:10px;padding:14px}
+  .loan-card .lc-amt .lbl{font-size:13px;opacity:.9}
+  .loan-card .lc-amt .val{font-size:20px;font-weight:800;margin-top:6px}
+  .loan-card .lc-btns{display:flex;flex-direction:column;gap:8px;justify-content:center}
+  .btn-maroon{background:var(--maroon);color:white;border:none;border-radius:9px;padding:12px 20px;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap}
+  .det-card{background:white;border-radius:14px;padding:6px 16px;margin-bottom:14px;box-shadow:0 2px 10px rgba(15,37,71,.07)}
+  .det-row{display:flex;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--border);font-size:14px;gap:14px}
+  .det-row:last-child{border-bottom:none}
+  .det-row .k{color:var(--text)} .det-row .v{font-weight:700;color:var(--maroon);text-align:right}
+  .twobtn{display:flex;gap:10px;margin-top:4px}
+  .twobtn .btn-maroon{flex:1;text-align:center}
+  .tbl-head{background:var(--maroon);color:white;border-radius:10px;display:flex;padding:12px 8px;font-size:12px;font-weight:700;text-align:center;margin-bottom:8px}
+  .tbl-head>div{flex:1}
+  .tbl-row{background:white;border-radius:10px;display:flex;padding:14px 8px;font-size:13px;text-align:center;margin-bottom:8px;box-shadow:0 1px 5px rgba(15,37,71,.06);align-items:center}
+  .tbl-row>div{flex:1}
+  .sec-box{border:1.5px solid var(--maroon);border-radius:10px;padding:12px 16px;font-weight:700;color:var(--maroon);font-size:15px;margin:14px 0 10px}
+  .pcard{background:white;border-radius:14px;padding:14px 16px;margin-bottom:14px;box-shadow:0 2px 10px rgba(15,37,71,.07)}
+  .pcard .prow{display:flex;padding:9px 0;font-size:14px;gap:10px}
+  .pcard .prow .pk{font-weight:700;color:var(--navy);min-width:120px}
+  .pcard .prow .pv{color:var(--muted)}
+  .ptop{text-align:center;padding:10px 0}
+  .ptop .pname{font-size:18px;font-weight:800;color:var(--navy);margin-top:6px}
+  .overdue{background:#fef2f2;border:1.5px solid #fca5a5;border-radius:12px;padding:14px;margin-bottom:14px}
+  .overdue .t{font-weight:800;color:var(--danger);font-size:14px}
+  .overdue .s{font-size:12.5px;color:#7f1d1d;margin-top:3px}
+  .bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:white;display:flex;justify-content:space-around;padding:8px 0 10px;box-shadow:0 -2px 12px rgba(0,0,0,.08);z-index:30}
+  .bnav button{background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--muted);cursor:pointer;flex:1}
+  .bnav button.active{color:var(--maroon);font-weight:700}
+  .bnav .ic{width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:18px}
+  .menu-item{background:white;border-radius:12px;padding:18px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 8px rgba(15,37,71,.06);font-size:15px;font-weight:600;color:var(--navy);cursor:pointer}
+  .logout-btn{display:block;margin:24px auto 8px;background:var(--maroon);color:white;border:none;border-radius:10px;padding:13px 40px;font-size:15px;font-weight:700;cursor:pointer}
+  .ver{text-align:center;font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div id="login-screen">
+  <img src="icon-192.svg" alt="Dhan Raksha" onerror="this.style.display='none'"/>
+  <div class="login-card">
+    <h1>ग्राहक पासबुक</h1>
+    <div class="sub">Customer Passbook — अपनी जानकारी देखें</div>
+    <div class="login-err" id="login-err"></div>
+    <label>Customer ID / ग्राहक आईडी</label>
+    <div style="display:flex;align-items:center;border:1.5px solid var(--border);border-radius:10px;margin-bottom:14px;overflow:hidden">
+      <span style="background:#f1f5f9;padding:12px 10px;font-size:14px;color:var(--muted);font-weight:600;white-space:nowrap">CUS-2026-</span>
+      <input id="in-cust" placeholder="नंबर डालें" autocomplete="off" inputmode="numeric" style="border:none;border-radius:0;margin:0;flex:1"/>
+    </div>
+    <label>Loan ID / लोन आईडी</label>
+    <div style="display:flex;align-items:center;border:1.5px solid var(--border);border-radius:10px;margin-bottom:14px;overflow:hidden">
+      <span style="background:#f1f5f9;padding:12px 10px;font-size:14px;color:var(--muted);font-weight:600;white-space:nowrap">LOAN-2026-</span>
+      <input id="in-loan" placeholder="नंबर डालें" autocomplete="off" inputmode="numeric" style="border:none;border-radius:0;margin:0;flex:1"/>
+    </div>
+    <button class="login-btn" id="login-btn" onclick="doLogin()">देखें / View Passbook</button>
+  </div>
+  <div style="color:rgba(255,255,255,.5);font-size:11px;margin-top:18px">Dhan Raksha Finance</div>
+</div>
+<div id="app" class="wrap" style="display:none">
+  <div class="topbar">
+    <button class="back" id="backBtn" onclick="goBack()">←</button>
+    <div class="ttl" id="pageTitle">Loan</div>
+    <img src="icon-192.svg" alt="" onerror="this.style.display='none'"/>
+  </div>
+  <div class="page active" id="pg-loan"></div>
+  <div class="page" id="pg-detail"></div>
+  <div class="page" id="pg-demand"></div>
+  <div class="page" id="pg-history"></div>
+  <div class="page" id="pg-pay"></div>
+  <div class="page" id="pg-profile"></div>
+  <div class="page" id="pg-more"></div>
+  <div class="bnav">
+    <button id="nav-loan" class="active" onclick="showPage('loan')"><span class="ic">📋</span>Loan</button>
+    <button id="nav-profile" onclick="showPage('profile')"><span class="ic">👤</span>Profile</button>
+    <button id="nav-more" onclick="showPage('more')"><span class="ic">⋯</span>More</button>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL='https://oswbpddfbofoyddxdfej.supabase.co';
+const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zd2JwZGRmYm9mb3lkZHhkZmVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1MzA0NDUsImV4cCI6MjA5NTEwNjQ0NX0.Gem36jnT-m4I13k078tYxyxPfv_FLChfxgrMK4Kzk7o';
+const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const fmt=n=>(parseFloat(n)||0).toLocaleString('en-IN',{maximumFractionDigits:0});
+const fmt2=n=>(parseFloat(n)||0).toLocaleString('en-IN',{minimumFractionDigits:1,maximumFractionDigits:1});
+let DATA=null,LOAN=null,pageHistory=['loan'];
+
+// ── UPI PAYMENT CONFIG — yahan badal sakte ho (future mein company UPI) ──
+const UPI_ID   = '9919868090-4@nyes';
+const UPI_NAME = 'ARUN KUMAR YADAV';
+const UPI_NOTE = 'Dhan Raksha Loan EMI';
+async function doLogin(saved){
+  const custNum = saved? saved.cust : document.getElementById('in-cust').value.trim();
+  const loanNum = saved? saved.loan : document.getElementById('in-loan').value.trim();
+  const err=document.getElementById('login-err'),btn=document.getElementById('login-btn');
+  if(err)err.style.display='none';
+  if(!custNum||!loanNum){if(err){err.textContent='Customer number aur Loan number dono daalein';err.style.display='block';}return;}
+  if(btn){btn.disabled=true;btn.textContent='देख रहे हैं...';}
+  try{
+    // prefix laga ke poora ID banao, number-only match bhi function mein hai
+    const fullCust = 'CUS-2026-'+custNum;
+    const fullLoan = 'LOAN-2026-'+loanNum;
+    const {data,error}=await db.rpc('get_customer_passbook',{p_customer_num:custNum,p_loan_num:loanNum});
+    if(error)throw error;
+    if(!data||!data.found){
+      try{localStorage.removeItem('smf_cust');}catch(e){}
+      if(err){err.textContent='❌ Galat number. Kripya sahi Customer/Loan number daalein.';err.style.display='block';}
+      if(btn){btn.disabled=false;btn.textContent='देखें / View Passbook';}
+      return;
+    }
+    // yaad rakho (refresh par dobara login na maange)
+    try{localStorage.setItem('smf_cust', JSON.stringify({cust:custNum,loan:loanNum}));}catch(e){}
+    DATA=data;computeLoan();
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').style.display='block';
+    showPage('loan');window.scrollTo(0,0);
+  }catch(e){
+    if(err){err.textContent='Error: '+(e.message||'galat');err.style.display='block';}
+    if(btn){btn.disabled=false;btn.textContent='देखें / View Passbook';}
+  }
+}
+
+// Page khulte hi — agar pehle login kiya tha to seedha passbook kholo
+window.addEventListener('load', ()=>{
+  let saved=null;
+  try{ saved=JSON.parse(localStorage.getItem('smf_cust')||'null'); }catch(e){}
+  if(saved && saved.cust && saved.loan){ doLogin(saved); }
+});
+function logout(){ try{localStorage.removeItem('smf_cust');}catch(e){} location.reload(); }
+function computeLoan(){
+  const d=DATA;
+  const balanceField=parseFloat(d.balance)||0;
+  const interest=parseFloat(d.interest_amount)||0;
+  const weeks=parseInt(d.loan_weeks)||12;
+  const credits=(d.payments||[]).filter(p=>p.type==='credit').sort((a,b)=>new Date(a.date)-new Date(b.date));
+
+  // Admin app: 'balance' field = current loan ka principal (renew pe ye reset hota hai).
+  // Isliye balance ko hi base maano, payments se total recalc mat karo.
+  const principal=balanceField;          // current loan principal
+  const total=principal+interest;        // total payable (principal + interest)
+  const emi=weeks>0?Math.round(total/weeks):0;
+
+  // current loan ke payments: renew ke baad ke (loan_date se naye). Agar loan_date hai to usse filter karo.
+  let curCredits=credits;
+  if(d.loan_date){
+    const ld=new Date(d.loan_date);
+    const filtered=credits.filter(p=>new Date(p.date)>=ld);
+    if(filtered.length) curCredits=filtered; // agar naye payments hain to wahi, warna sab
+    else curCredits=[]; // renew hua par abhi koi payment nahi
+  }
+  const paid=curCredits.reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
+  const balance=Math.max(0,total-paid);  // current outstanding
+  const paidWeeks=emi>0?Math.round(paid/emi):0;
+  let start=d.first_emi_date?new Date(d.first_emi_date):(d.loan_date?new Date(d.loan_date):(curCredits[0]?new Date(curCredits[0].date):new Date()));
+  // FLAT split — har week barabar principal aur interest (admin app jaisa)
+  const prinPerWeek=weeks>0?Math.round(principal/weeks):0;
+  const intPerWeek=weeks>0?Math.round(interest/weeks):0;
+  let schedule=[];
+  for(let i=0;i<weeks;i++){
+    const dt=new Date(start);dt.setDate(dt.getDate()+i*7);
+    schedule.push({seq:i+1,date:dt,principal:prinPerWeek,interest:intPerWeek,total:prinPerWeek+intPerWeek});
+  }
+  let nextDue=null,isOverdue=false,overdueAmt=0;
+  if(balance>0){
+    const idx=Math.min(paidWeeks,weeks-1);
+    nextDue=schedule[idx]?schedule[idx].date:null;
+    if(nextDue){isOverdue=nextDue<new Date(new Date().toDateString());if(isOverdue)overdueAmt=emi;}
+  }
+  let runHistory=[],out=total;
+  credits.forEach(p=>{out-=parseFloat(p.amount)||0;runHistory.push({date:p.date,amount:p.amount,mode:(p.description||'Cash'),outstanding:Math.max(0,out)});});
+  runHistory.reverse();
+  LOAN={principal,interest,total,balance,paid,weeks,emi,paidWeeks,schedule,nextDue,isOverdue,overdueAmt,runHistory,rate:principal>0?((interest/principal)*100).toFixed(2):'0'};
+}
+const dmy=d=>d?(d.getDate?d:new Date(d)).toLocaleDateString('en-GB'):'-';
+function showPage(p,isBack){
+  if(!isBack&&p!==pageHistory[pageHistory.length-1])pageHistory.push(p);
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+  document.getElementById('pg-'+p).classList.add('active');
+  ['loan','profile','more'].forEach(n=>{const b=document.getElementById('nav-'+n);if(b)b.classList.toggle('active',n===p);});
+  const titles={loan:'Loan',detail:'Loan Details',demand:'Demand Details',history:'Payment History',pay:'Pay / भुगतान',profile:'Profile',more:'More'};
+  document.getElementById('pageTitle').textContent=titles[p]||'';
+  document.getElementById('backBtn').style.display=(['detail','demand','history','pay'].includes(p))?'block':'none';
+  render(p);window.scrollTo(0,0);
+}
+function goBack(){if(pageHistory.length>1){pageHistory.pop();showPage(pageHistory[pageHistory.length-1],true);}}
+function render(p){
+  const d=DATA,L=LOAN;
+  if(p==='loan'){
+    document.getElementById('pg-loan').innerHTML=`
+      <div class="loan-card">
+        <div class="lc-top"><span class="lc-type">${d.loan_cycle||'Loan'}</span><span class="lc-id">${d.loan_id||''}</span></div>
+        <div class="lc-body">
+          <div class="lc-amt"><div class="lbl">Outstanding Amount</div><div class="val">₹ ${fmt2(L.balance)}</div></div>
+          <div class="lc-btns">
+            <button class="btn-maroon" onclick="showPage('detail')">Details</button>
+            ${L.balance>0?`<button class="btn-maroon" style="background:var(--success)" onclick="showPage('pay')">💰 Pay Now</button>`:''}
+          </div>
+        </div>
+      </div>
+      <div style="text-align:center;color:var(--muted);font-size:12px;margin-top:8px">नमस्ते ${d.name||''} 🙏<br>अपने लोन की पूरी जानकारी के लिए Details दबाएं</div>`;
+  }else if(p==='detail'){
+    document.getElementById('pg-detail').innerHTML=`
+      ${L.isOverdue?`<div class="overdue"><div class="t">⚠️ किस्त बाकी है / Overdue</div><div class="s">आपकी EMI की तारीख (${dmy(L.nextDue)}) निकल गई है। कृपया जल्द भुगतान करें।</div></div>`:''}
+      <div class="det-card">
+        <div class="det-row"><span class="k">Loan Id</span><span class="v">${d.loan_id||'-'}</span></div>
+        <div class="det-row"><span class="k">Outstanding</span><span class="v">₹${fmt2(L.balance)}</span></div>
+        <div class="det-row"><span class="k">Next Emi Amount</span><span class="v">₹${fmt(L.emi)}</span></div>
+        <div class="det-row"><span class="k">Overdue Amount</span><span class="v">₹${fmt(L.overdueAmt)}</span></div>
+        <div class="det-row"><span class="k">Next Emi Date</span><span class="v">${dmy(L.nextDue)}</span></div>
+        <div class="det-row"><span class="k">Principal Total</span><span class="v">₹${fmt(L.principal)}</span></div>
+        <div class="det-row"><span class="k">Interest Total</span><span class="v">₹${fmt(L.interest)}</span></div>
+        <div class="det-row"><span class="k">Total Amount Due</span><span class="v">₹${fmt2(L.total)}</span></div>
+        <div class="det-row"><span class="k">Interest Rate</span><span class="v">${L.rate}%</span></div>
+        <div class="det-row"><span class="k">Loan Tenure</span><span class="v">${L.weeks} Weeks</span></div>
+        <div class="det-row"><span class="k">Remaining/Total</span><span class="v">${Math.max(0,L.weeks-L.paidWeeks)}/${L.weeks}</span></div>
+      </div>
+      <div class="twobtn">
+        <button class="btn-maroon" onclick="showPage('history')">Payment History</button>
+        <button class="btn-maroon" onclick="showPage('demand')">Demand Details</button>
+      </div>`;
+  }else if(p==='demand'){
+    document.getElementById('pg-demand').innerHTML=`
+      <div class="tbl-head"><div>Seq</div><div>Date</div><div>Principal</div><div>Interest</div><div>Total</div><div>Received</div></div>
+      ${L.schedule.map((s,i)=>`<div class="tbl-row"><div>${s.seq}</div><div style="font-size:11px">${dmy(s.date)}</div><div>${fmt(s.principal)}</div><div>${fmt(s.interest)}</div><div>${fmt(s.total)}</div><div style="color:${i<L.paidWeeks?'var(--success)':'var(--muted)'};font-weight:700">${i<L.paidWeeks?'✓ '+fmt(s.total):'-'}</div></div>`).join('')}`;
+  }else if(p==='history'){
+    const h=L.runHistory;
+    document.getElementById('pg-history').innerHTML=`
+      <div class="tbl-head"><div>Date</div><div>Collected</div><div>Mode</div><div>Outstanding</div></div>
+      ${h.length?h.map(r=>`<div class="tbl-row"><div>${dmy(r.date)}</div><div>${fmt(r.amount)}</div><div style="font-size:11px">${(r.mode||'Cash').slice(0,8)}</div><div>${fmt(r.outstanding)}</div></div>`).join(''):'<div style="text-align:center;color:var(--muted);padding:24px">कोई भुगतान नहीं</div>'}`;
+  }else if(p==='profile'){
+    const mask=(s,keep=4)=>s?'*'.repeat(Math.max(0,(''+s).length-keep))+(''+s).slice(-keep):'-';
+    document.getElementById('pg-profile').innerHTML=`
+      <div class="pcard"><div class="ptop">
+        <div id="prof-photo" style="width:90px;height:90px;border-radius:50%;background:#e2e8f0;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:34px;color:#94a3b8;overflow:hidden">👤</div>
+        <div class="pname">${d.name||'-'}</div></div>
+        <div class="prow"><span class="pk">Name</span><span class="pv">${d.name||'-'}</span></div>
+        <div class="prow"><span class="pk">DOB</span><span class="pv">${d.dob?dmy(d.dob):'-'}</span></div>
+        <div class="prow"><span class="pk">Customer Id</span><span class="pv">${d.customer_id||'-'}</span></div>
+        <div class="prow"><span class="pk">Father/Spouse</span><span class="pv">${d.father_name||'-'}</span></div>
+        <div class="prow"><span class="pk">Phone</span><span class="pv">${d.phone||'-'}</span></div>
+      </div>
+      <div class="sec-box">KYC Details</div>
+      <div class="pcard">
+        <div class="prow"><span class="pk">Aadhaar</span><span class="pv">${mask(d.aadhaar_no)}</span></div>
+        <div class="prow"><span class="pk">PAN</span><span class="pv">${d.pan_no?mask(d.pan_no,4):'-'}</span></div>
+      </div>
+      <div class="sec-box">Address Details</div>
+      <div class="pcard"><div class="prow"><span class="pk">Address</span><span class="pv">${d.address||'-'}</span></div></div>
+      <div class="sec-box">Center Details / केंद्र विवरण</div>
+      <div class="pcard">
+        <div class="prow"><span class="pk">Center / केंद्र</span><span class="pv">${d.center_name||'-'}</span></div>
+        <div class="prow"><span class="pk">Meeting Day / मीटिंग दिन</span><span class="pv">${d.meeting_day||d.finance_company||d.bank_name||'-'}</span></div>
+      </div>`;
+    loadProfilePhoto();
+  }else if(p==='pay'){
+    renderPayPage();
+  }else if(p==='more'){
+    document.getElementById('pg-more').innerHTML=`
+      <div class="menu-item" onclick="alert('Dhan Raksha Finance — आपकी विश्वसनीय माइक्रोफाइनेंस सेवा।')">About Us <span>→</span></div>
+      <div class="menu-item" onclick="alert('आपका डेटा सुरक्षित है। हम आपकी जानकारी किसी तीसरे पक्ष से साझा नहीं करते।')">Privacy Policy <span>→</span></div>
+      <button class="logout-btn" onclick="logout()">Logout</button>
+      <div class="ver">Customer Passbook v3</div>`;
+  }
+}
+// ── PAY PAGE (4 options + QR + UPI) ──
+let selectedPayAmt=0;
+function renderPayPage(){
+  const L=LOAN;
+  const emi=L.emi;
+  const overdue=L.overdueAmt;
+  const regularOverdue=emi+overdue;
+  const preclosure=Math.round(L.balance);
+  selectedPayAmt=emi; // default
+  const opt=(id,label,amt,sub)=>`
+    <label style="display:flex;align-items:center;justify-content:space-between;background:white;border:1.5px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;cursor:pointer">
+      <span style="display:flex;align-items:center;gap:12px">
+        <input type="radio" name="paymode" value="${amt}" ${id==='regular'?'checked':''} onchange="onPaySelect(this,'${id}')" style="width:18px;height:18px;accent-color:var(--maroon)"/>
+        <span><span style="font-weight:700;color:var(--navy);font-size:14px">${label}</span>${sub?`<br><span style="font-size:11px;color:var(--muted)">${sub}</span>`:''}</span>
+      </span>
+      <span style="font-weight:800;color:var(--maroon);font-size:15px">₹${fmt(amt)}</span>
+    </label>`;
+  document.getElementById('pg-pay').innerHTML=`
+    <div class="sec-box">Collection Mode / भुगतान चुनें</div>
+    ${opt('regular','Regular / नियमित (1 किस्त)',emi,'एक साप्ताहिक EMI')}
+    ${overdue>0?opt('regplus','Regular + Overdue',regularOverdue,'EMI + बकाया किस्त'):''}
+    <label style="display:flex;align-items:center;justify-content:space-between;background:white;border:1.5px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;cursor:pointer">
+      <span style="display:flex;align-items:center;gap:12px">
+        <input type="radio" name="paymode" onchange="onPaySelect(this,'partial')" style="width:18px;height:18px;accent-color:var(--maroon)"/>
+        <span><span style="font-weight:700;color:var(--navy);font-size:14px">Partial / आंशिक</span><br><span style="font-size:11px;color:var(--muted)">अपनी राशि डालें</span></span>
+      </span>
+      <input id="partial-amt" type="number" placeholder="₹" oninput="onPartial(this)" style="width:90px;border:1.5px solid var(--border);border-radius:8px;padding:8px;font-size:14px;text-align:right"/>
+    </label>
+    ${opt('preclosure','Preclosure / पूर्ण भुगतान',preclosure,'पूरा लोन बंद करें')}
+
+    <div style="background:white;border-radius:12px;padding:16px;margin:14px 0;box-shadow:0 2px 10px rgba(15,37,71,.07);text-align:center">
+      <div style="font-size:13px;color:var(--muted)">भुगतान राशि / Payable Amount</div>
+      <div id="pay-amt-display" style="font-size:28px;font-weight:800;color:var(--maroon);margin-top:4px">₹${fmt(emi)}</div>
+    </div>
+
+    <button class="btn-maroon" style="width:100%;background:var(--success);padding:16px;font-size:16px" onclick="openUpiPay()">💰 Pay Now / अभी भुगतान करें</button>
+    <div style="text-align:center;font-size:11px;color:var(--muted);margin-top:10px">UPI से सुरक्षित भुगतान · GPay · PhonePe · Paytm</div>`;
+}
+function onPaySelect(el,mode){
+  if(mode==='partial'){ const pa=document.getElementById('partial-amt'); selectedPayAmt=parseFloat(pa.value)||0; }
+  else { selectedPayAmt=parseFloat(el.value)||0; }
+  document.getElementById('pay-amt-display').textContent='₹'+fmt(selectedPayAmt);
+}
+function onPartial(el){
+  const r=el.closest('label').querySelector('input[type=radio]'); if(r)r.checked=true;
+  selectedPayAmt=parseFloat(el.value)||0;
+  document.getElementById('pay-amt-display').textContent='₹'+fmt(selectedPayAmt);
+}
+function buildUpiUrl(amt){
+  const note=encodeURIComponent(UPI_NOTE+' - '+(DATA.name||''));
+  return `upi://pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent(UPI_NAME)}&am=${amt}&cu=INR&tn=${note}`;
+}
+function openUpiPay(){
+  const amt=selectedPayAmt;
+  if(!amt||amt<=0){alert('कृपया राशि चुनें');return;}
+  const upiUrl=buildUpiUrl(amt);
+  const qrImg='https://api.qrserver.com/v1/create-qr-code/?size=240x240&data='+encodeURIComponent(upiUrl);
+  // QR + UPI ID modal
+  const m=document.createElement('div');
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px';
+  m.innerHTML=`
+    <div style="background:white;border-radius:18px;padding:22px;max-width:340px;width:100%;text-align:center">
+      <div style="font-size:17px;font-weight:800;color:var(--navy)">भुगतान करें ₹${fmt(amt)}</div>
+      <div style="font-size:12px;color:var(--muted);margin:4px 0 14px">किसी भी UPI app से QR स्कैन करें</div>
+      <img src="${qrImg}" alt="QR" style="width:240px;height:240px;border:1px solid var(--border);border-radius:12px"/>
+      <div style="font-size:12px;color:var(--muted);margin-top:14px">📲 GPay · PhonePe · Paytm · किसी भी app से</div>
+      <a href="${upiUrl}" style="display:block;background:var(--success);color:white;border-radius:10px;padding:14px;margin-top:14px;font-weight:700;text-decoration:none;font-size:15px">📱 UPI App में खोलें</a>
+      <button onclick="this.closest('div[style*=fixed]').remove()" style="width:100%;background:none;border:none;padding:12px;margin-top:6px;font-size:13px;color:var(--muted);cursor:pointer">बंद करें</button>
+      <div style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.4">भुगतान के बाद अपने एजेंट को सूचित करें ताकि रसीद मिल सके।</div>
+    </div>`;
+  m.onclick=e=>{if(e.target===m)m.remove();};
+  document.body.appendChild(m);
+}
+function copyUpi(){ navigator.clipboard?.writeText(UPI_ID).then(()=>alert('UPI ID कॉपी हो गई: '+UPI_ID)).catch(()=>alert(UPI_ID)); }
+
+// ── Profile photo (admin app jaisा — signed URL) ──
+async function loadProfilePhoto(){
+  const box=document.getElementById('prof-photo');
+  if(!box) return;
+  if(!DATA.photo_url){ console.log('No photo_url for this client'); return; }
+  try{
+    let path=DATA.photo_url;
+    const marker='/client-photos/';
+    const i=path.indexOf(marker);
+    if(i!==-1) path=path.substring(i+marker.length).split('?')[0];
+    // try signed URL (admin jaisा)
+    let url='';
+    try{
+      const {data}=await db.storage.from('client-photos').createSignedUrl(path,3600);
+      url=data?.signedUrl||'';
+    }catch(e){}
+    // fallback: public URL
+    if(!url){
+      const {data}=db.storage.from('client-photos').getPublicUrl(path);
+      url=data?.publicUrl||'';
+    }
+    if(url){
+      box.innerHTML=`<img src="${url}" style="width:100%;height:100%;object-fit:cover" onerror="this.parentElement.innerHTML='👤';console.log('img load fail')"/>`;
+    }
+  }catch(e){console.log('photo error',e);}
+}
+
+document.getElementById('in-loan').addEventListener('keypress',e=>{if(e.key==='Enter')doLogin();});
+</script>
+</body>
+</html>
