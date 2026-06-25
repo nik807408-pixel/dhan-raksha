@@ -8,6 +8,18 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 // ── HELPER FUNCTIONS ─────────────────────
 function fmt(n) { return Number(n||0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+// Current loan ke payments (renew ke baad purane loan ke payments hata ke).
+// Renew par naya loan_date set hota hai; usse pehle wale payments purane loan ke hain.
+function currentLoanPayments(cl) {
+  const loanStart = cl.loan_date ? new Date(cl.loan_date) : null;
+  return allPayments.filter(p => {
+    if (p.client_id !== cl.id || p.type !== 'credit') return false;
+    if ((p.description||'').includes('DELETED')) return false;
+    if (loanStart && p.date && new Date(p.date) < loanStart) return false;
+    return true;
+  });
+}
 function v(id) { return (document.getElementById(id)?.value || '').trim(); }
 function dRow(lbl, val) { return val ? `<div class="detail-row"><span class="detail-lbl">${lbl}</span><span class="detail-val">${val}</span></div>` : ''; }
 function emptyState(icon, msg) { return `<div class="empty"><div class="empty-icon">${icon}</div><p style="margin-top:10px;font-size:13px">${msg}</p></div>`; }
@@ -121,100 +133,12 @@ async function manualRefresh() {
   if (btn) { btn.disabled = false; btn.textContent = '🔄'; }
 }
 
-// ── DEMO MODE — no login required ────────
-async function initDemoApp() {
-  currentUser = { id: null, email: 'demo@dhanraksha.com' };
-  currentProfile = { id: null, name: 'Demo Admin', role: 'admin' };
-
-  document.getElementById('auth-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'flex';
-
-  // Demo = READ-ONLY banner (DB writes RLS se blocked hain)
-  if (!document.getElementById('demo-banner')) {
-    const b = document.createElement('div');
-    b.id = 'demo-banner';
-    b.style.cssText = 'background:linear-gradient(90deg,#d97706,#f59e0b);color:white;text-align:center;font-size:11px;font-weight:700;padding:5px 8px';
-    b.textContent = '👁️ DEMO MODE — View Only / केवल देखने के लिए। Full access ke liye sampark karein.';
-    document.getElementById('app').prepend(b);
-  }
-
-  document.getElementById('uname').textContent = 'Demo';
-  const rp = document.getElementById('urole');
-  rp.textContent = 'Admin';
-  rp.className = 'role-pill role-admin';
-
-  await loadAll();
-  showPage('dashboard');
-  startAutoRefresh();
-}
-
-function showDemoLogin() {
-  const authScreen = document.getElementById('auth-screen');
-  authScreen.style.display = 'flex';
-  authScreen.innerHTML = `
-    <div style="width:100%;max-width:380px;margin:auto;padding:24px">
-      <!-- Logo -->
-      <div style="text-align:center;margin-bottom:32px">
-        <div style="width:72px;height:72px;background:linear-gradient(135deg,#1a2e4a,#d97706);border-radius:20px;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(26,46,74,.3)">
-          <svg viewBox="0 0 52 52" width="44" height="44">
-            <circle cx="26" cy="26" r="24" fill="rgba(255,255,255,.15)"/>
-            <text x="26" y="22" text-anchor="middle" font-family="serif" font-size="13" font-weight="700" fill="white">धन</text>
-            <text x="26" y="37" text-anchor="middle" font-family="serif" font-size="13" font-weight="700" fill="#FFD700">रक्षा</text>
-          </svg>
-        </div>
-        <div style="font-size:22px;font-weight:800;color:white">धन <span style="color:#d97706">रक्षा</span></div>
-        <div style="font-size:12px;color:rgba(255,255,255,.6);margin-top:4px">Demo Finance App</div>
-      </div>
-
-      <!-- Login Card -->
-      <div style="background:white;border-radius:20px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-        <div style="font-size:18px;font-weight:700;color:#1a2e4a;margin-bottom:4px">Welcome! 👋</div>
-        <div style="font-size:12px;color:#64748b;margin-bottom:20px">Demo account mein login karein</div>
-
-        <div style="margin-bottom:14px">
-          <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Username</label>
-          <input id="demo-user" type="text" placeholder="demo" value="demo"
-            style="width:100%;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 14px;font-size:14px;margin-top:4px;outline:none;box-sizing:border-box;color:#1a2e4a"
-            onfocus="this.style.borderColor='#1a2e4a'" onblur="this.style.borderColor='#e2e8f0'">
-        </div>
-
-        <div style="margin-bottom:20px">
-          <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Password</label>
-          <input id="demo-pass" type="password" placeholder="demo@123" value="demo@123"
-            style="width:100%;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 14px;font-size:14px;margin-top:4px;outline:none;box-sizing:border-box;color:#1a2e4a"
-            onfocus="this.style.borderColor='#1a2e4a'" onblur="this.style.borderColor='#e2e8f0'"
-            onkeydown="if(event.key==='Enter') demoLogin()">
-        </div>
-
-        <div id="demo-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 12px;font-size:12px;color:#dc2626;margin-bottom:14px">
-          ❌ Username ya Password galat hai!
-        </div>
-
-        <button onclick="demoLogin()" style="width:100%;background:linear-gradient(135deg,#1a2e4a,#2d4a7a);color:white;border:none;border-radius:12px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(26,46,74,.3)">
-          Login / प्रवेश करें
-        </button>
-
-        <div style="text-align:center;margin-top:14px;padding:10px;background:#f8fafc;border-radius:8px">
-          <div style="font-size:11px;color:#64748b;font-weight:600">Demo Credentials:</div>
-          <div style="font-size:12px;color:#1a2e4a;margin-top:2px">User: <strong>demo</strong> | Pass: <strong>demo@123</strong></div>
-        </div>
-      </div>
-    </div>`;
-}
-
-function demoLogin() {
-  const user = document.getElementById('demo-user')?.value.trim();
-  const pass = document.getElementById('demo-pass')?.value.trim();
-  const errEl = document.getElementById('demo-error');
-
-  if (user === 'demo' && pass === 'demo@123') {
-    sessionStorage.setItem('demoLoggedIn', 'true');
-    if (errEl) errEl.style.display = 'none';
-    initDemoApp();
-  } else {
-    if (errEl) errEl.style.display = 'block';
-  }
-}
+// ── DEMO MODE — DISABLED in production (Dhan Raksha) ────────
+// Demo login Dhan Raksha demo app ke liye tha. Production me real
+// Supabase auth use hota hai. Yeh stubs accidental/console call rok dete hain.
+async function initDemoApp() { showAuth(); }
+function showDemoLogin() { showAuth(); }
+function demoLogin() { showAuth(); }
 
 // ── APP INIT ─────────────────────────────
 async function initApp(user) {
@@ -253,11 +177,40 @@ async function loadAll() {
 }
 
 // ── DATA LOADING ──────────────────────────
+
+// Private bucket: stored value ab 'path' hai. Display ke liye signed URL banao.
+// Purani rows me full public URL ho sakti hai — usme se path nikaal lo.
+function extractStoragePath(stored) {
+  if (!stored) return '';
+  const marker = '/client-photos/';
+  const i = stored.indexOf(marker);
+  if (i !== -1) return stored.substring(i + marker.length).split('?')[0];
+  return stored; // already a path
+}
+
+async function signOne(stored) {
+  const path = extractStoragePath(stored);
+  if (!path) return '';
+  try {
+    const { data } = await db.storage.from('client-photos').createSignedUrl(path, 3600);
+    return data?.signedUrl || '';
+  } catch (e) { console.error('Sign URL error:', e); return ''; }
+}
+
+async function hydratePhotoUrls(clients) {
+  await Promise.all(clients.map(async (c) => {
+    if (c.photo_url)     c.photo_url     = await signOne(c.photo_url);
+    if (c.aadhaar_photo) c.aadhaar_photo = await signOne(c.aadhaar_photo);
+    if (c.pan_photo)     c.pan_photo     = await signOne(c.pan_photo);
+  }));
+}
+
 async function loadClients() {
   let q = db.from('clients').select('*').order('created_at', { ascending: false });
   if (currentProfile.role !== 'admin') q = q.eq('assigned_to', currentUser.id);
   const { data } = await q;
   allClients = data || [];
+  await hydratePhotoUrls(allClients);
 }
 
 async function loadEmployees() {
@@ -286,15 +239,65 @@ async function loadInvoices() {
 // ── PAGES ─────────────────────────────────
 function showPage(page) {
   currentPage = page;
-  ['dashboard','clients','invoices','team'].forEach(p => {
+  ['dashboard','clients','payments','invoices','team'].forEach(p => {
     const btn = document.getElementById('nav-' + p);
     if (btn) btn.classList.toggle('active', p === page);
   });
   const c = document.getElementById('main-content');
   if (page === 'dashboard') renderDashboard(c);
   else if (page === 'clients') renderClientsPage(c);
+  else if (page === 'payments') renderPaymentsPage(c);
   else if (page === 'invoices') renderInvoicesPage(c);
   else if (page === 'team') renderTeamPage(c);
+}
+
+// ── PAYMENTS PAGE — client search + quick payment ─────────
+let paySearchTerm = '';
+function renderPaymentsPage(c) {
+  c.innerHTML = `
+    <div style="background:linear-gradient(135deg,var(--navy),var(--navy2));border-radius:16px;padding:16px;margin-bottom:16px;color:white">
+      <div style="font-size:20px;font-weight:800">💰 भुगतान / Payment</div>
+      <div style="font-size:11px;opacity:.8;margin-top:2px">Client chuno aur payment add karo</div>
+    </div>
+    <input id="pay-search" oninput="paySearchTerm=this.value;renderPayList()" placeholder="🔍 Client naam ya phone se khojें..."
+      style="width:100%;border:1.5px solid var(--border);border-radius:12px;padding:12px 14px;font-size:14px;margin-bottom:14px"/>
+    <div id="pay-list"></div>`;
+  renderPayList();
+}
+
+function renderPayList() {
+  const el = document.getElementById('pay-list');
+  if (!el) return;
+  const term = paySearchTerm.toLowerCase().trim();
+  let list = allClients.filter(c => (c.status !== 'closed'));
+  if (term) {
+    list = list.filter(c =>
+      (c.name||'').toLowerCase().includes(term) ||
+      (c.phone||'').includes(term) ||
+      (c.center_name||'').toLowerCase().includes(term)
+    );
+  }
+  if (!list.length) {
+    el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:24px">Koi client nahi mila</div>';
+    return;
+  }
+  el.innerHTML = list.slice(0, 50).map(c => {
+    const bal = parseFloat(c.balance)||0;
+    const weeks = parseInt(c.loan_weeks)||12;
+    const emi = bal > 0 ? Math.round(((parseFloat(c.balance)||0)+(parseFloat(c.interest_amount)||0))/weeks) : 0;
+    return `
+    <div style="background:white;border-radius:12px;padding:14px;margin-bottom:10px;box-shadow:0 2px 8px rgba(15,37,71,.07);display:flex;justify-content:space-between;align-items:center">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;color:var(--navy);font-size:14px">${c.name||'—'}</div>
+        <div style="font-size:11px;color:var(--muted)">${c.center_name||''} ${c.phone? '· '+c.phone : ''}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">बाकी: ₹${fmt(bal)} ${emi? '· EMI ₹'+fmt(emi):''}</div>
+      </div>
+      <button onclick="activeClientId='${c.id}';openPayModal()"
+        style="background:var(--navy);color:white;border:none;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;margin-left:10px">
+        + भुगतान
+      </button>
+    </div>`;
+  }).join('');
 }
 
 // ── DASHBOARD ─────────────────────────────
@@ -679,8 +682,7 @@ async function uploadPhotosInBackground(clientId) {
       const path = `${currentUser.id}/profile_${Date.now()}.jpg`;
       const { data: up, error: e1 } = await db.storage.from('client-photos').upload(path, selectedPhotoFile, { upsert: true, contentType: 'image/jpeg' });
       if (up) {
-        const { data: pu } = db.storage.from('client-photos').getPublicUrl(path);
-        updates.photo_url = pu.publicUrl;
+        updates.photo_url = path;
       }
       if (e1) console.error('Profile photo error:', e1.message);
     }
@@ -688,8 +690,7 @@ async function uploadPhotosInBackground(clientId) {
       const path = `${currentUser.id}/aadhaar_${Date.now()}.jpg`;
       const { data: up, error: e2 } = await db.storage.from('client-photos').upload(path, aadhaarPhotoFile, { upsert: true, contentType: 'image/jpeg' });
       if (up) {
-        const { data: pu } = db.storage.from('client-photos').getPublicUrl(path);
-        updates.aadhaar_photo = pu.publicUrl;
+        updates.aadhaar_photo = path;
       }
       if (e2) console.error('Aadhaar photo error:', e2.message);
     }
@@ -697,8 +698,7 @@ async function uploadPhotosInBackground(clientId) {
       const path = `${currentUser.id}/pan_${Date.now()}.jpg`;
       const { data: up, error: e3 } = await db.storage.from('client-photos').upload(path, panPhotoFile, { upsert: true, contentType: 'image/jpeg' });
       if (up) {
-        const { data: pu } = db.storage.from('client-photos').getPublicUrl(path);
-        updates.pan_photo = pu.publicUrl;
+        updates.pan_photo = path;
       }
       if (e3) console.error('PAN photo error:', e3.message);
     }
@@ -973,7 +973,9 @@ async function handlePhotoSelect(input) {
   }
 }
 
+let _savingClient = false;
 async function saveClient() {
+  if (_savingClient) return; // double-click / double-fire guard
   const name = document.getElementById('f-name').value.trim();
   if (!name) { showErr(document.getElementById('cm-err'), 'Name required / नाम आवश्यक है'); return; }
 
@@ -984,10 +986,14 @@ async function saveClient() {
     return;
   }
 
+  _savingClient = true;
+
   const btn = document.querySelector('#client-modal .btn-primary');
   btn.disabled = true; btn.textContent = '📸 Uploading...';
 
   let photoUrl = null;
+  let aadhaarPhotoPath = null;
+  let panPhotoPath = null;
   // Upload profile photo first
   if (selectedPhotoFile) {
     btn.textContent = '📸 Profile photo...';
@@ -996,8 +1002,7 @@ async function saveClient() {
       const path = currentUser.id + '/profile_' + Date.now() + '.jpg';
       const { data: up, error: upErr } = await db.storage.from('client-photos').upload(path, compressed, { upsert: true, contentType: 'image/jpeg' });
       if (up) {
-        const { data: pu } = db.storage.from('client-photos').getPublicUrl(path);
-        photoUrl = pu.publicUrl;
+        photoUrl = path;
       } else if (upErr) console.error('Profile upload error:', upErr);
     } catch(e) { console.error('Profile compress error:', e); }
   }
@@ -1009,7 +1014,7 @@ async function saveClient() {
       const compressed = await compressImage(aadhaarPhotoFile, 50);
       const path = currentUser.id + '/aadhaar_' + Date.now() + '.jpg';
       const { data: up } = await db.storage.from('client-photos').upload(path, compressed, { upsert: true, contentType: 'image/jpeg' });
-      if (up) { const { data: pu } = db.storage.from('client-photos').getPublicUrl(path); payload.aadhaar_photo = pu.publicUrl; }
+      if (up) { aadhaarPhotoPath = path; }
     } catch(e) { console.error('Aadhaar upload error:', e); }
   }
 
@@ -1020,7 +1025,7 @@ async function saveClient() {
       const compressed = await compressImage(panPhotoFile, 50);
       const path = currentUser.id + '/pan_' + Date.now() + '.jpg';
       const { data: up } = await db.storage.from('client-photos').upload(path, compressed, { upsert: true, contentType: 'image/jpeg' });
-      if (up) { const { data: pu } = db.storage.from('client-photos').getPublicUrl(path); payload.pan_photo = pu.publicUrl; }
+      if (up) { panPhotoPath = path; }
     } catch(e) { console.error('PAN upload error:', e); }
   }
 
@@ -1047,13 +1052,10 @@ async function saveClient() {
     balance: parseFloat(v('f-balance')) || 0,
     bank_name: v('f-bank'),
     notes: v('f-notes'),
-    loan_id: loanId,
     husband_wife_name: v('f-spouse'),
     marital_status: document.getElementById('f-marital')?.value || 'unmarried',
     address2: v('f-address2'),
     interest_amount: parseFloat(v('f-interest')) || 0,
-    lpf: parseFloat(v('f-lpf')) || 500,
-    lpc: parseFloat(v('f-lpc')) || 0,
     finance_company: v('f-bank'),
     kyc_approved: document.getElementById('f-kyc-approved')?.value === 'true',
     center_name: v('f-center-name'),
@@ -1072,7 +1074,16 @@ async function saveClient() {
     card_issue_date: v('f-card-date') || null,
   };
   if (custId) payload.customer_id = custId;
+  if (loanId) payload.loan_id = loanId;
+  // lpf/lpc: edit ke waqt sirf tab update karo jab field bhara ho (warna purana data mit jata tha)
+  const lpfVal = v('f-lpf'), lpcVal = v('f-lpc');
+  if (lpfVal !== '') payload.lpf = parseFloat(lpfVal) || 0;
+  else if (!editingClientId) payload.lpf = 500;
+  if (lpcVal !== '') payload.lpc = parseFloat(lpcVal) || 0;
+  else if (!editingClientId) payload.lpc = 0;
   if (photoUrl) payload.photo_url = photoUrl;
+  if (aadhaarPhotoPath) payload.aadhaar_photo = aadhaarPhotoPath;
+  if (panPhotoPath) payload.pan_photo = panPhotoPath;
   console.log('Final payload photo_url:', photoUrl);
   console.log('Saving client with', Object.keys(payload).filter(k => payload[k]).length, 'fields');
 
@@ -1084,10 +1095,10 @@ async function saveClient() {
   }
 
   btn.textContent = '💾 Saving data...';
-  btn.disabled = false;
   if (error) {
     btn.textContent = 'Save / सहेजें';
     btn.disabled = false;
+    _savingClient = false;
     showErr(document.getElementById('cm-err'), error.message);
     return;
   }
@@ -1102,16 +1113,9 @@ async function saveClient() {
     savedClientId = latest?.id;
   }
 
-  // Upload photos NOW before closing
-  if (savedClientId && (selectedPhotoFile || aadhaarPhotoFile || panPhotoFile)) {
-    btn.disabled = true;
-    btn.textContent = '📸 Uploading photos...';
-    await uploadPhotosInBackground(savedClientId);
-    btn.disabled = false;
-    btn.textContent = 'Save / सहेजें';
-  }
-
-  closeModal('client-modal');
+  // NOTE: photos pehle hi inline upload ho chuke (payload mein paths hain).
+  // uploadPhotosInBackground sirf NEW insert ke liye fallback — edit par skip.
+  // (Double-upload aur race condition isi se hata)
   showToast(editingClientId ? '✅ Updated!' : '✅ Client added!', 'success');
 
   selectedPhotoFile = null;
@@ -1119,6 +1123,9 @@ async function saveClient() {
   generatedOTP = null;
   aadhaarPhotoFile = null;
   panPhotoFile = null;
+  _savingClient = false;
+  btn.disabled = false;
+  btn.textContent = 'Save / सहेजें';
   await loadAll();
   showPage(currentPage);
 }
@@ -1284,7 +1291,6 @@ async function openDetail(id) {
             title="Delete this payment">🗑️ Delete</button>` : ''}
         </div>`;
       }).join('') : '<div style="color:var(--muted);font-size:13px;text-align:center;padding:10px">No payments yet</div>'}
-      <button class="pay-add-btn" onclick="openPayModal()">+ Add Payment / भुगतान जोड़ें</button>
     </div>
 
     <div class="detail-section">
@@ -1306,6 +1312,7 @@ async function openDetail(id) {
     </div>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeModal('detail-modal')">Close / बंद</button>
+      <button onclick="printLoanCard('${c.id}')" style="flex:1;padding:10px;background:linear-gradient(135deg,#065f46,#047857);color:white;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer">🪪 Loan Card</button>
       <button class="btn-primary" style="flex:2" onclick="openEditClient(allClients.find(x=>x.id==='${c.id}'))">Edit / संपादित</button>
     </div>
   `;
@@ -1371,11 +1378,12 @@ async function savePayment() {
   const cl = allClients.find(c => c.id === activeClientId);
   if (cl) {
     const totalLoanInterest = (parseFloat(cl.balance)||0) + (parseFloat(cl.interest_amount)||0);
-    const totalPaid = allPayments
-      .filter(p => p.client_id === activeClientId && p.type === 'credit' && !(p.description||'').includes('Reversal') && !(p.description||'').includes('DELETED'))
+    const totalPaid = currentLoanPayments(cl)
+      .filter(p => !(p.description||'').includes('Reversal'))
       .reduce((s,p) => s + (parseFloat(p.amount)||0), 0);
+    const loanStart = cl.loan_date ? new Date(cl.loan_date) : null;
     const debitRev = allPayments
-      .filter(p => p.client_id === activeClientId && p.type === 'debit' && (p.description||'').includes('Reversal'))
+      .filter(p => p.client_id === activeClientId && p.type === 'debit' && (p.description||'').includes('Reversal') && (!loanStart || !p.date || new Date(p.date) >= loanStart))
       .reduce((s,p) => s + (parseFloat(p.amount)||0), 0);
     const outstanding = Math.max(0, totalLoanInterest - totalPaid + debitRev);
 
@@ -1389,7 +1397,11 @@ async function savePayment() {
     }
   }
 
-  openDetail(activeClientId);
+  if (currentPage === 'payments') {
+    renderPayList();
+  } else {
+    openDetail(activeClientId);
+  }
 }
 
 // ── MORE PAGE ────────────────────────────
@@ -1407,7 +1419,7 @@ function renderInvoicesPage(c) {
     <button onclick="moreTab=null;showPage('invoices')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;color:var(--muted)">← वापस / Back</button>
   </div>
   <div id="more-content">
-    ${moreTab==='emi' ? renderEMITab() : moreTab==='passbook' ? renderPassbookTab() : moreTab==='cashbook' ? renderCashBookTab() : moreTab==='collreg' ? renderCollectionRegTab() : moreTab==='clients' ? renderClientsTab() : renderMeetingTab()}
+    ${moreTab==='emi' ? renderEMITab() : moreTab==='passbook' ? renderPassbookTab() : moreTab==='cashbook' ? renderCashBookTab() : moreTab==='collreg' ? renderCollectionRegTab() : moreTab==='clients' ? renderClientsTab() : moreTab==='monthly' ? renderMonthlyReportTab() : moreTab==='summary' ? renderClientSummaryTab() : renderMeetingTab()}
   </div>
   ` : `
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:4px">
@@ -1448,6 +1460,26 @@ function renderInvoicesPage(c) {
       <div style="font-size:10px;opacity:.7;margin-top:2px">संग्रह रजिस्टर</div>
     </div>
 
+    <div onclick="moreTab='monthly';showPage('invoices')" style="background:linear-gradient(135deg,#0f766e,#14b8a6);border-radius:16px;padding:20px;cursor:pointer;color:white;text-align:center;box-shadow:0 4px 12px rgba(15,118,110,.3)">
+      <div style="font-size:32px;margin-bottom:8px">📊</div>
+      <div style="font-size:14px;font-weight:700">Monthly Report</div>
+      <div style="font-size:10px;opacity:.7;margin-top:2px">मासिक रिपोर्ट</div>
+    </div>
+
+    ${currentProfile.role === 'admin' ? `
+    <div onclick="moreTab='summary';showPage('invoices')" style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);border-radius:16px;padding:20px;cursor:pointer;color:white;text-align:center;box-shadow:0 4px 12px rgba(30,58,138,.3)">
+      <div style="font-size:32px;margin-bottom:8px">🗂️</div>
+      <div style="font-size:14px;font-weight:700">Client Summary</div>
+      <div style="font-size:10px;opacity:.7;margin-top:2px">Center/Day-wise Assign</div>
+    </div>` : ''}
+
+    ${currentProfile.role === 'admin' ? `
+    <div onclick="showPage('team')" style="background:linear-gradient(135deg,#9d174d,#db2777);border-radius:16px;padding:20px;cursor:pointer;color:white;text-align:center;box-shadow:0 4px 12px rgba(157,23,77,.3)">
+      <div style="font-size:32px;margin-bottom:8px">🏢</div>
+      <div style="font-size:14px;font-weight:700">Team / टीम</div>
+      <div style="font-size:10px;opacity:.7;margin-top:2px">Employee Management</div>
+    </div>` : ''}
+
   </div>
   `}
   `;
@@ -1458,7 +1490,7 @@ function switchMoreTab(tab, btn) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   if (btn) btn.classList.add('active');
   const c = document.getElementById('more-content');
-  if (c) c.innerHTML = tab==='emi' ? renderEMITab() : tab==='passbook' ? renderPassbookTab() : tab==='cashbook' ? renderCashBookTab() : tab==='collreg' ? renderCollectionRegTab() : tab==='clients' ? renderClientsTab() : renderMeetingTab();
+  if (c) c.innerHTML = tab==='emi' ? renderEMITab() : tab==='passbook' ? renderPassbookTab() : tab==='cashbook' ? renderCashBookTab() : tab==='collreg' ? renderCollectionRegTab() : tab==='clients' ? renderClientsTab() : tab==='monthly' ? renderMonthlyReportTab() : tab==='summary' ? renderClientSummaryTab() : renderMeetingTab();
 }
 
 function renderClientsTab() {
@@ -1480,7 +1512,7 @@ function renderClientsTab() {
 
 // ── EMI TAB ───────────────────────────────
 function renderEMICard(cl) {
-  const payments = allPayments.filter(p => p.client_id === cl.id && p.type === 'credit');
+  const payments = currentLoanPayments(cl);
   const totalPaid = payments.reduce((s, p) => s + (parseFloat(p.amount)||0), 0);
   const loanAmt = parseFloat(cl.balance) || 0;
   const interest = parseFloat(cl.interest_amount) || 0;
@@ -1640,7 +1672,8 @@ function renderPassbookTab() {
   <div id="passbook-client-list-more">`;
   
   clients.forEach(cl => {
-    const payments = allPayments.filter(p => p.client_id === cl.id && p.type === 'credit');
+    // Renew ke baad: sirf current loan ke payments gino
+    const payments = currentLoanPayments(cl);
     const loan = parseFloat(cl.balance)||0;
     const interest = parseFloat(cl.interest_amount)||0;
     const totalPaid = payments.reduce((s,p) => s+(parseFloat(p.amount)||0), 0);
@@ -1908,6 +1941,248 @@ async function submitRenewal(clientId) {
 }
 
 
+// ── MONTHLY REPORT ────────────────────────
+let monthlyMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+
+// ═══════════════════════════════════════════════════════════════
+// CLIENT SUMMARY — day+center wise grouping, 1-click bulk assign
+// ═══════════════════════════════════════════════════════════════
+let summaryDayFilter = '';
+let summaryCenterFilter = '';
+
+function renderClientSummaryTab() {
+  if (currentProfile.role !== 'admin') {
+    return `<div style="text-align:center;color:var(--muted);padding:30px">Sirf admin ke liye / Admin only</div>`;
+  }
+
+  const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  const dayHindi = {Monday:'सोमवार',Tuesday:'मंगलवार',Wednesday:'बुधवार',Thursday:'गुरुवार',Friday:'शुक्रवार',Saturday:'शनिवार',Sunday:'रविवार'};
+  const centers = [...new Set(allClients.map(c => c.center_name).filter(Boolean))].sort();
+
+  let html = `
+  <div class="section-hdr no-print">
+    <div class="section-title">🗂️ Client Summary <span class="hindi">/ ग्राहक सारांश</span></div>
+  </div>
+  <div class="no-print" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <select id="sum-day" onchange="summaryDayFilter=this.value;refreshClientSummary()" style="flex:1;min-width:120px;border:1.5px solid var(--border);border-radius:8px;padding:9px 10px;font-size:13px">
+      <option value="">सभी दिन / All Days</option>
+      ${days.map(d => `<option value="${d}" ${summaryDayFilter===d?'selected':''}>${dayHindi[d]} / ${d}</option>`).join('')}
+    </select>
+    <select id="sum-center" onchange="summaryCenterFilter=this.value;refreshClientSummary()" style="flex:1;min-width:120px;border:1.5px solid var(--border);border-radius:8px;padding:9px 10px;font-size:13px">
+      <option value="">सभी सेंटर / All Centers</option>
+      ${centers.map(c => `<option value="${c}" ${summaryCenterFilter===c?'selected':''}>${c}</option>`).join('')}
+    </select>
+  </div>
+  <div id="summary-groups">${buildSummaryGroups()}</div>`;
+  return html;
+}
+
+function refreshClientSummary() {
+  const el = document.getElementById('summary-groups');
+  if (el) el.innerHTML = buildSummaryGroups();
+}
+
+function buildSummaryGroups() {
+  let filtered = allClients.filter(c =>
+    (!summaryDayFilter || c.meeting_day === summaryDayFilter) &&
+    (!summaryCenterFilter || c.center_name === summaryCenterFilter)
+  );
+
+  if (!filtered.length) {
+    return `<div style="text-align:center;color:var(--muted);padding:24px">Is filter mein koi client nahi</div>`;
+  }
+
+  // Group by center + meeting_day
+  const groups = {};
+  filtered.forEach(c => {
+    const center = c.center_name || 'बिना सेंटर / No Center';
+    const day = c.meeting_day || 'बिना दिन / No Day';
+    const key = center + ' ||| ' + day;
+    if (!groups[key]) groups[key] = { center, day, clients: [] };
+    groups[key].clients.push(c);
+  });
+
+  const empOptions = allEmployees
+    .filter(e => e.is_approved || e.role === 'admin')
+    .map(e => `<option value="${e.id}">${e.name || e.email}${e.role==='admin'?' (Admin)':''}</option>`).join('');
+
+  let html = '';
+  Object.entries(groups).forEach(([key, g], idx) => {
+    const gid = 'grp' + idx;
+    // current assignment summary
+    const assignCounts = {};
+    g.clients.forEach(c => {
+      const emp = allEmployees.find(e => e.id === c.assigned_to);
+      const nm = emp ? (emp.name || emp.email) : 'अनासाइन्ड';
+      assignCounts[nm] = (assignCounts[nm] || 0) + 1;
+    });
+    const assignSummary = Object.entries(assignCounts).map(([n,ct]) => `${n}: ${ct}`).join(' · ');
+
+    html += `
+    <div style="background:white;border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 2px 8px rgba(15,37,71,.08)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <div style="font-size:14px;font-weight:800;color:var(--navy)">📍 ${g.center}</div>
+          <div style="font-size:12px;color:var(--muted)">📅 ${g.day} · ${g.clients.length} clients</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">वर्तमान: ${assignSummary}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <select id="${gid}-emp" style="flex:1;min-width:140px;border:1.5px solid var(--border);border-radius:8px;padding:9px 10px;font-size:13px">
+          <option value="">-- Employee chunें --</option>
+          ${empOptions}
+        </select>
+        <button onclick="assignGroupToEmployee('${gid}', ${JSON.stringify(g.clients.map(c=>c.id)).replace(/"/g,'&quot;')})"
+          style="background:var(--navy);color:white;border:none;border-radius:8px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">
+          ✅ सभी असाइन करें
+        </button>
+      </div>
+      <details style="margin-top:10px">
+        <summary style="font-size:12px;color:var(--navy);cursor:pointer">👁️ Clients dekhein (${g.clients.length})</summary>
+        <div style="margin-top:8px">
+          ${g.clients.map(c => `<div style="font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)">${c.name} <span style="color:var(--muted)">— ₹${fmt(parseFloat(c.balance)||0)}</span></div>`).join('')}
+        </div>
+      </details>
+    </div>`;
+  });
+  return html;
+}
+
+async function assignGroupToEmployee(gid, clientIds) {
+  const sel = document.getElementById(gid + '-emp');
+  const empId = sel?.value;
+  if (!empId) { showToast('Pehle employee chunें', 'error'); return; }
+  const emp = allEmployees.find(e => e.id === empId);
+  const empName = emp ? (emp.name || emp.email) : 'employee';
+
+  if (!confirm(`${clientIds.length} clients ko "${empName}" ko assign karein?`)) return;
+
+  try {
+    const { error } = await db.from('clients')
+      .update({ assigned_to: empId })
+      .in('id', clientIds);
+    if (error) throw error;
+
+    // local update
+    clientIds.forEach(id => {
+      const c = allClients.find(x => x.id === id);
+      if (c) c.assigned_to = empId;
+    });
+    showToast(`✅ ${clientIds.length} clients → ${empName}`, 'success');
+    refreshClientSummary();
+    await loadAll();
+    refreshClientSummary();
+  } catch (err) {
+    console.error('Group assign error:', err);
+    showToast('Assign failed: ' + (err.message || ''), 'error');
+  }
+}
+
+function renderMonthlyReportTab() {
+  return `
+  <div class="section-hdr no-print">
+    <div class="section-title">📊 Monthly Report <span class="hindi">/ मासिक रिपोर्ट</span></div>
+  </div>
+  <div class="no-print" style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+    <input type="month" id="mr-month" value="${monthlyMonth}" onchange="monthlyMonth=this.value;refreshMonthlyReport()"
+      style="border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px">
+    <button onclick="printMonthlyReport()" style="background:var(--navy);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer">🖨️ Print</button>
+  </div>
+  <div id="monthly-print-area">${buildMonthlyReportHTML(monthlyMonth)}</div>`;
+}
+
+function refreshMonthlyReport() {
+  const area = document.getElementById('monthly-print-area');
+  if (area) area.innerHTML = buildMonthlyReportHTML(monthlyMonth);
+}
+
+function buildMonthlyReportHTML(month) {
+  const inMonth = d => (d || '').startsWith(month);
+  const fmt = n => '₹' + Number(n || 0).toLocaleString('en-IN');
+
+  const pays = (allPayments || []).filter(p =>
+    inMonth(p.date)
+    && !(p.description || '').includes('DELETED')
+    && !(p.description || '').includes('Reversal')
+  );
+  const credits = pays.filter(p => p.type === 'credit');
+  const debits  = pays.filter(p => p.type === 'debit');
+  const totalColl = credits.reduce((s, p) => s + Number(p.amount || 0), 0);
+  const totalDisb = debits.reduce((s, p) => s + Number(p.amount || 0), 0);
+  const newClients = (allClients || []).filter(c => inMonth((c.created_at || '').slice(0, 10)));
+  const newLoans = (allClients || []).filter(c => inMonth(c.loan_date || ''));
+  const loanDisbAmt = newLoans.reduce((s, c) => s + Number(c.loan_amount || 0), 0);
+
+  // Employee-wise collection
+  const byEmp = {};
+  credits.forEach(p => {
+    const k = p.created_by || 'unknown';
+    if (!byEmp[k]) byEmp[k] = { count: 0, amount: 0 };
+    byEmp[k].count++; byEmp[k].amount += Number(p.amount || 0);
+  });
+  const empName = id => (allEmployees || []).find(e => e.id === id)?.name || '—';
+  const empRows = Object.entries(byEmp)
+    .sort((a, b) => b[1].amount - a[1].amount)
+    .map(([id, v]) => `<tr>
+      <td style="border:1px solid #ddd;padding:6px;font-size:12px">${empName(id)}</td>
+      <td style="border:1px solid #ddd;padding:6px;font-size:12px;text-align:center">${v.count}</td>
+      <td style="border:1px solid #ddd;padding:6px;font-size:12px;text-align:right;font-weight:700">${fmt(v.amount)}</td>
+    </tr>`).join('');
+
+  const [yy, mm] = month.split('-');
+  const monthLabel = new Date(yy, mm - 1).toLocaleString('en-IN', { month: 'long', year: 'numeric' });
+
+  const card = (label, hindi, value, color) => `
+    <div style="background:white;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(15,37,71,.08);border-left:4px solid ${color}">
+      <div style="font-size:11px;color:var(--muted);font-weight:600">${label} <span style="opacity:.7">/ ${hindi}</span></div>
+      <div style="font-size:20px;font-weight:800;color:var(--navy);margin-top:4px">${value}</div>
+    </div>`;
+
+  return `
+  <div style="background:white;border-radius:12px;padding:12px;margin-bottom:12px;text-align:center;box-shadow:0 2px 8px rgba(15,37,71,.08)">
+    <div style="font-size:16px;font-weight:800;color:var(--navy)">धन रक्षा Finance — Monthly Report</div>
+    <div style="font-size:12px;color:var(--muted)">${monthLabel}</div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+    ${card('Total Collection', 'कुल वसूली', fmt(totalColl), '#22c55e')}
+    ${card('Disbursement (Payments)', 'भुगतान', fmt(totalDisb), '#ef4444')}
+    ${card('New Loans Issued', 'नए लोन', newLoans.length + ' (' + fmt(loanDisbAmt) + ')', '#d97706')}
+    ${card('New Clients', 'नए ग्राहक', String(newClients.length), '#1d4ed8')}
+    ${card('Transactions', 'लेन-देन', String(pays.length), '#7c3aed')}
+    ${card('Net Cash Flow', 'शुद्ध नकदी', fmt(totalColl - totalDisb), totalColl - totalDisb >= 0 ? '#22c55e' : '#ef4444')}
+  </div>
+
+  <div style="background:white;border-radius:12px;padding:14px;box-shadow:0 2px 8px rgba(15,37,71,.08)">
+    <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">Employee-wise Collection <span class="hindi">/ कर्मचारी-वार वसूली</span></div>
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="background:#1a2e4a;color:white">
+        <th style="border:1px solid #ddd;padding:6px;font-size:12px;text-align:left">Employee</th>
+        <th style="border:1px solid #ddd;padding:6px;font-size:12px">Entries</th>
+        <th style="border:1px solid #ddd;padding:6px;font-size:12px;text-align:right">Amount</th>
+      </tr></thead>
+      <tbody>${empRows || '<tr><td colspan="3" style="border:1px solid #ddd;padding:10px;text-align:center;font-size:12px;color:var(--muted)">Is month me koi collection entry nahi</td></tr>'}</tbody>
+      ${empRows ? `<tfoot><tr style="background:#f8fafc;font-weight:800">
+        <td style="border:1px solid #ddd;padding:6px;font-size:12px">TOTAL</td>
+        <td style="border:1px solid #ddd;padding:6px;font-size:12px;text-align:center">${credits.length}</td>
+        <td style="border:1px solid #ddd;padding:6px;font-size:12px;text-align:right">${fmt(totalColl)}</td>
+      </tr></tfoot>` : ''}
+    </table>
+  </div>`;
+}
+
+function printMonthlyReport() {
+  const html = `<!DOCTYPE html><html><head><title>Monthly Report - ${monthlyMonth}</title>
+  <style>body{font-family:Arial,sans-serif;margin:10mm}table{width:100%;border-collapse:collapse}
+  th,td{border:1px solid #999;padding:6px;font-size:12px}th{background:#1a2e4a;color:white}
+  @media print{@page{margin:10mm}}</style></head><body>
+  ${getPrintableHTML('monthly-print-area')}</body></html>`;
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+  setTimeout(() => w.print(), 300);
+}
+
 function renderCashBookTab() {
   const today = new Date().toISOString().slice(0,10);
   // Auto-fill opening balance from allPayments
@@ -2126,8 +2401,7 @@ async function quickPay(clientId, defaultEmi) {
 
     // Auto-close check
     const totalLoanInterest = (parseFloat(cl.balance)||0) + (parseFloat(cl.interest_amount)||0);
-    const totalPaid = allPayments
-      .filter(p => p.client_id === clientId && p.type === 'credit' && !(p.description||'').includes('DELETED'))
+    const totalPaid = currentLoanPayments(cl)
       .reduce((s,p) => s+(parseFloat(p.amount)||0), 0);
     const outstanding = Math.max(0, totalLoanInterest - totalPaid);
 
@@ -2161,7 +2435,126 @@ function autoCalcLPFLPC() {
   if (lpcEl) lpcEl.value = lpc;
 }
 
-// ── VOICE / MIC SUPPORT ──────────────────────────────────────────────────
+// ── LOAN CARD PRINT ──────────────────────────────────────────────────────
+function printLoanCard(clientId) {
+  const cl = allClients.find(c => c.id === clientId);
+  if (!cl) return;
+
+  const loan = parseFloat(cl.balance)||0;
+  const interest = parseFloat(cl.interest_amount)||0;
+  const weeks = parseInt(cl.loan_weeks)||12;
+  const emi = Math.round((loan+interest)/weeks);
+  const lpf = parseFloat(cl.lpf)||500;
+  const lpc = parseFloat(cl.lpc)||Math.ceil(loan/10000)*500;
+  const totalGst = Math.round((lpf+lpc)*0.18);
+  const cgst = Math.round(totalGst/2);
+  const sgst = Math.round(totalGst/2);
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  @media print { body { margin: 0; } }
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #000; margin: 20px; }
+  .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; }
+  .company-name { font-size: 18px; font-weight: bold; }
+  .company-sub { font-size: 11px; }
+  .section-title { background: #1a2e4a; color: white; text-align: center; padding: 5px; font-weight: bold; font-size: 13px; margin: 10px 0 6px; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { border: 1px solid #999; padding: 5px 8px; font-size: 11px; }
+  .label { color: #444; font-weight: 600; width: 35%; background: #f5f5f5; }
+  .photo-box { width: 80px; height: 90px; border: 1px solid #999; float: right; text-align: center; font-size: 10px; color: #666; padding-top: 30px; }
+  .sign-table td { height: 45px; vertical-align: bottom; font-size: 10px; }
+  .footer-text { font-size: 10px; color: #555; margin-top: 8px; border: 1px solid #ccc; padding: 8px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="company-name">धन रक्षा Finance</div>
+  <div class="company-sub">शाखा कार्यालय: बलिया, उत्तर प्रदेश</div>
+</div>
+
+<div class="section-title">ऋण पुस्तिका (Loan Card)</div>
+
+<!-- Client Info -->
+<div style="overflow:hidden">
+  <div class="photo-box">
+    ${cl.photo_url ? `<img src="${cl.photo_url}" style="width:78px;height:88px;object-fit:cover"/>` : 'फोटो<br>Photo'}
+  </div>
+  <table style="width:calc(100% - 95px)">
+    <tr><td class="label">शाखा का नाम</td><td>बलिया</td></tr>
+    <tr><td class="label">क्षेत्र का नाम</td><td>${cl.center_name||'—'}</td></tr>
+    <tr><td class="label">केंद्र/समूह विवरण</td><td>${cl.center_name||'—'} / ${cl.meeting_day||'—'}</td></tr>
+    <tr><td class="label">कलक्टर का नाम</td><td>${cl.name||'—'}</td></tr>
+    <tr><td class="label">ग्राहक आई.डी.</td><td>${cl.customer_id||'—'}</td></tr>
+    <tr><td class="label">ऋण आई.डी.</td><td>${cl.loan_id||'—'}</td></tr>
+    <tr><td class="label">संपर्क नंबर</td><td>${cl.phone||'—'}</td></tr>
+    <tr><td class="label">सह-बीमाकर्ता का नाम</td><td>${cl.husband_wife_name||cl.guarantor_name||'—'}</td></tr>
+    <tr><td class="label">पता</td><td>${cl.address||''} ${cl.city||''} ${cl.state||''}</td></tr>
+  </table>
+</div>
+
+<!-- Loan Details -->
+<div class="section-title">ऋण विवरण</div>
+<table>
+  <tr>
+    <td class="label">ऋण राशि</td><td><strong>₹${fmt(loan)}</strong></td>
+    <td class="label">उत्पाद</td><td>${cl.loan_purpose||'General'}</td>
+  </tr>
+  <tr>
+    <td class="label">ऋण का उद्देश्य</td><td>${cl.loan_purpose||'—'}</td>
+    <td class="label">भुगतान की अवधि</td><td>${weeks} Weeks</td>
+  </tr>
+  <tr>
+    <td class="label">ऋण आरंभ तिथि</td><td>${cl.loan_date||'—'}</td>
+    <td class="label">प्रथम किस्त तिथि</td><td>${cl.first_emi_date||'—'}</td>
+  </tr>
+  <tr>
+    <td class="label">साप्ताहिक किस्त</td><td><strong>₹${fmt(emi)}</strong></td>
+    <td class="label">ब्याज राशि</td><td>₹${fmt(interest)}</td>
+  </tr>
+  <tr>
+    <td class="label">LPF (जीवन बीमा)</td><td>₹${fmt(lpf)}</td>
+    <td class="label">LPC</td><td>₹${fmt(lpc)}</td>
+  </tr>
+  <tr>
+    <td class="label">Total GST (18%)</td><td>₹${fmt(totalGst)}</td>
+    <td class="label">CGST</td><td>₹${fmt(cgst)}</td>
+  </tr>
+  <tr>
+    <td class="label">SGST</td><td>₹${fmt(sgst)}</td>
+    <td class="label">लोन चक्र</td><td>${cl.loan_cycle||'1st'}</td>
+  </tr>
+</table>
+
+<!-- Helpline -->
+<div class="footer-text">
+  किसी भी शिकायत के लिए संपर्क करें | For any complaint please contact: <strong>धन रक्षा Finance, बलिया</strong>
+</div>
+
+<!-- Signatures -->
+<div class="section-title">हस्ताक्षर</div>
+<table class="sign-table">
+  <tr>
+    <td style="width:33%">ग्राहक का नाम: <strong>${cl.name||''}</strong><br><br><br>ग्राहक हस्ताक्षर: ___________</td>
+    <td style="width:34%">सी.एम.ओ. का नाम:<br><br><br>सी.एम.ओ. हस्ताक्षर: ___________</td>
+    <td style="width:33%">बी.एम. का नाम:<br><br><br>बी.एम. हस्ताक्षर: ___________</td>
+  </tr>
+</table>
+
+<script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }</script>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+}
+
+
 function startVoice(targetId, onResult, lang = 'hi-IN') {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
@@ -2230,6 +2623,341 @@ function voiceNote(targetId) {
     }
     showToast(`📝 Note added: "${text}"`, 'success');
   });
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// HELP ASSISTANT — features overview + "kaise use kare" voice Q&A
+// ═══════════════════════════════════════════════════════════════
+const HELP_GUIDE = [
+  { keys:['dashboard','डैशबोर्ड','overview','summary'], icon:'📊', title:'Dashboard / डैशबोर्ड',
+    steps:'Login karte hi Dashboard khulta hai. Yahan total clients, total loan, total received, outstanding aur LPF ek nazar mein dikhta hai. Neeche charts mein top clients aur collection trend dikhta hai.',
+    spoken:'Dashboard par aapko poore business ka saransh dikhta hai — kul grahak, kul loan, wasooli aur baki raqam.' },
+  { keys:['client','grahak','ग्राहक','add client','naya client','kyc'], icon:'👥', title:'Client Add / ग्राहक जोड़ें',
+    steps:'1. Neeche "ग्राहक" tab par jao\n2. "+ जोड़ें" button dabao\n3. Naam, phone, address bharo\n4. Phone par OTP verify karo\n5. Aadhaar/PAN photo upload karo (50KB tak auto-compress hota hai)\n6. Loan amount, EMI, center details bharo\n7. Save dabao',
+    spoken:'Grahak jodne ke liye neeche grahak tab par jaakar plus button dabayen, naam phone bharein, OTP verify karein, Aadhaar photo upload karein aur save karein.' },
+  { keys:['payment','jama','भुगतान','जमा','emi','collect','wasool','installment','kisht'], icon:'💳', title:'Payment Entry / भुगतान दर्ज',
+    steps:'1. Client kholo (ग्राहक list se naam par tap)\n2. "Payment" ya "+" button dabao\n3. Amount aur date bharo, Save\n\nYa Meeting Day page se Quick Pay karo. Ya 🎤 mic button dabakar bolo: "Ramesh 500 jama karo"',
+    spoken:'Payment ke liye client khol kar payment button dabayen, raqam bharein aur save karein. Ya mic dabakar bol dein — naam aur raqam.' },
+  { keys:['passbook','पासबुक','statement'], icon:'📔', title:'Passbook / पासबुक',
+    steps:'1. More tab → Passbook\n2. Client choose karo\n3. 12-week passbook dikhega — har kisht ki entry\n4. Multi-cycle: 1st/2nd cycle tabs upar hain\n5. Print button se print karo',
+    spoken:'More tab mein passbook kholen, grahak chunen — barah hafte ki passbook dikhegi, print bhi kar sakte hain.' },
+  { keys:['emi tracker','due','overdue','बकाया'], icon:'⏰', title:'EMI Tracker',
+    steps:'More → EMI Tracker. Yahan sabki due/overdue kishtein dikhती hain — aaj kiski EMI hai, kaun late hai.',
+    spoken:'EMI tracker mein aaj ki aur overdue kishtein dikhti hain.' },
+  { keys:['cash book','cashbook','कैश बुक','रोकड़'], icon:'📒', title:'Cash Book / कैश बुक',
+    steps:'1. More → Cash Book\n2. Date choose karo\n3. Opening, collection, kharcha, bank deposit bharo\n4. Note denominations (500×kitne, 100×kitne)\n5. Save — data Supabase mein save hota hai\n6. Print button se A4 print',
+    spoken:'Cash book mein rozana ka hisaab bharein — opening, collection, kharcha. Save aur print dono hota hai.' },
+  { keys:['collection register','collreg','संग्रह','register'], icon:'📋', title:'Collection Register',
+    steps:'More → Collection Reg. Har center ka due/pre/OD collection, LPF/LPC bharo. Total auto-calculate hota hai. Save + landscape print.',
+    spoken:'Collection register mein center-wise wasooli bharein, total apne aap judta hai.' },
+  { keys:['monthly report','report','रिपोर्ट','मासिक'], icon:'📊', title:'Monthly Report / मासिक रिपोर्ट',
+    steps:'More → Monthly Report. Month choose karo — total collection, disbursement, naye clients, employee-wise wasooli table dikhega. Print bhi hota hai.',
+    spoken:'Monthly report mein poore mahine ka collection, naye loan aur employee-wise wasooli dikhti hai.' },
+  { keys:['npa','default'], icon:'⚠️', title:'NPA Tracking',
+    steps:'Dashboard/More mein NPA section — jo clients lambi time se payment nahi kar rahe woh yahan dikhte hain.',
+    spoken:'NPA mein woh grahak dikhte hain jinki kisht lambe samay se nahi aayi.' },
+  { keys:['team','approve','employee','कर्मचारी','टीम','staff'], icon:'🏢', title:'Team / टीम (Admin only)',
+    steps:'1. Team tab (sirf admin ko dikhta hai)\n2. Naya employee app mein signup karega\n3. Tumhe "Pending" mein dikhega → Approve dabao → apna admin password daalo\n4. Employee ko hatana ho: 🚫 Deactivate dabao — uska access band, clients tumhe transfer',
+    spoken:'Team tab mein naye karmchari approve karein ya purane deactivate karein. Approve ke liye apna admin password dalna hota hai.' },
+  { keys:['loan card','print card','कार्ड'], icon:'🖨️', title:'Loan Card Print',
+    steps:'Client detail kholo → Loan Card Print button → SATIN-style card print hota hai client ko dene ke liye.',
+    spoken:'Client ke andar loan card print ka button hai — chhapkar grahak ko de sakte hain.' },
+  { keys:['voice','mic','awaaz','आवाज़','बोल'], icon:'🎤', title:'Voice Assistant / आवाज़ सहायक',
+    steps:'Neeche 🎤 button dabao aur bolo:\n• "Ramesh 500 jama karo" → payment (confirm ke baad save)\n• "Sunita ka balance batao" → outstanding sunayi dega\n\n❓ button se yeh help khulta hai.',
+    spoken:'Mic dabakar naam aur raqam bolen, confirm karne par payment save ho jata hai. Balance bhi puchh sakte hain.' },
+];
+
+function openHelpAssistant() {
+  const overlay = document.getElementById('voice-overlay');
+  const status = document.getElementById('voice-status');
+  overlay.classList.add('show');
+  status.innerHTML = `<b style="color:var(--navy)">❓ App Guide / ऐप गाइड</b>`;
+  renderHelpMenu();
+  speak('Is app mein yeh features hain. Kisi par tap karein, ya mic dabakar puchein — jaise, passbook kaise use karein.');
+}
+
+function renderHelpMenu() {
+  const body = document.getElementById('voice-body');
+  let html = `<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Feature par tap karo, ya 🎤 dabakar pucho: <i>"passbook kaise use kare?"</i></div>`;
+  HELP_GUIDE.forEach((h, i) => {
+    html += `<div class="voice-client-pick" onclick="showHelpTopic(${i})"><span>${h.icon} ${h.title}</span><span style="color:var(--muted)">›</span></div>`;
+  });
+  html += `<div class="voice-confirm-row">
+    <button class="voice-btn-no" onclick="closeVoiceSheet()">बंद करें</button>
+    <button class="voice-btn-yes" style="background:var(--navy)" onclick="toggleVoiceAssistant()">🎤 पूछें</button>
+  </div>`;
+  body.innerHTML = html;
+}
+
+function showHelpTopic(i) {
+  const h = HELP_GUIDE[i];
+  const body = document.getElementById('voice-body');
+  body.innerHTML = `
+    <div style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:8px">${h.icon} ${h.title}</div>
+    <div style="font-size:13.5px;line-height:1.7;color:var(--text);white-space:pre-line;background:var(--bg);border-radius:10px;padding:12px">${h.steps}</div>
+    <div class="voice-confirm-row">
+      <button class="voice-btn-no" onclick="renderHelpMenu()">‹ वापस</button>
+      <button class="voice-btn-yes" style="background:var(--navy)" onclick="speak(HELP_GUIDE[${i}].spoken)">🔊 सुनें</button>
+    </div>`;
+  window.speechSynthesis?.cancel();
+  speak(h.spoken);
+}
+
+function matchHelpTopic(text) {
+  const lower = text.toLowerCase();
+  let best = -1, bestScore = 0;
+  HELP_GUIDE.forEach((h, i) => {
+    let score = 0;
+    h.keys.forEach(k => { if (lower.includes(k) || text.includes(k)) score += k.length; });
+    if (score > bestScore) { bestScore = score; best = i; }
+  });
+  return best;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// VOICE ASSISTANT — payment entry & balance lookup, with confirmation
+// ═══════════════════════════════════════════════════════════════
+let voiceRecognition = null;
+let voicePendingPayment = null; // {clientId, amount}
+
+function toggleVoiceAssistant() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showToast('Browser mic support nahi hai! Chrome use karein.', 'error');
+    return;
+  }
+  const fab = document.getElementById('voice-fab');
+  if (fab.classList.contains('listening')) {
+    voiceRecognition?.stop();
+    return;
+  }
+
+  const overlay = document.getElementById('voice-overlay');
+  const status = document.getElementById('voice-status');
+  const body = document.getElementById('voice-body');
+  body.innerHTML = '';
+  status.textContent = '🎤 बोलिए... / Speak now...';
+  overlay.classList.add('show');
+  fab.classList.add('listening');
+
+  voiceRecognition = new SpeechRecognition();
+  voiceRecognition.lang = 'en-IN';
+  voiceRecognition.interimResults = true;
+  voiceRecognition.maxAlternatives = 1;
+
+  voiceRecognition.onresult = (e) => {
+    let text = '';
+    for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
+    status.innerHTML = `<div class="voice-transcript">"${text}"</div>`;
+    if (e.results[0].isFinal) {
+      fab.classList.remove('listening');
+      handleVoiceCommand(text.trim());
+    }
+  };
+  voiceRecognition.onerror = (e) => {
+    fab.classList.remove('listening');
+    status.textContent = '';
+    body.innerHTML = `<div style="text-align:center;color:var(--danger);padding:10px">⚠️ Mic error: ${e.error}. Dobara try karein.</div>`;
+  };
+  voiceRecognition.onend = () => { fab.classList.remove('listening'); };
+  voiceRecognition.start();
+}
+
+function closeVoiceSheet() {
+  document.getElementById('voice-overlay').classList.remove('show');
+  document.getElementById('voice-fab').classList.remove('listening');
+  voiceRecognition?.stop();
+}
+
+function speak(text) {
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'hi-IN';
+    window.speechSynthesis.speak(u);
+  } catch (e) {}
+}
+
+// Devanagari → Roman, basic phonetic transliteration (helps match English-typed client names)
+function transliterateDevanagari(text) {
+  const map = {
+    'अ':'a','आ':'a','इ':'i','ई':'i','उ':'u','ऊ':'u','ए':'e','ऐ':'ai','ओ':'o','औ':'au',
+    'क':'k','ख':'kh','ग':'g','घ':'gh','च':'ch','छ':'chh','ज':'j','झ':'jh','ञ':'n',
+    'ट':'t','ठ':'th','ड':'d','ढ':'dh','ण':'n','त':'t','थ':'th','द':'d','ध':'dh','न':'n',
+    'प':'p','फ':'ph','ब':'b','भ':'bh','म':'m','य':'y','र':'r','ल':'l','व':'v','श':'sh','ष':'sh','स':'s','ह':'h',
+    'ं':'n','ँ':'n','ः':'h','्':'',
+    'ा':'a','ि':'i','ी':'i','ु':'u','ू':'u','े':'e','ै':'ai','ो':'o','ौ':'au','ृ':'ri'
+  };
+  let out = '';
+  for (const ch of text) out += (map[ch] !== undefined ? map[ch] : ch);
+  return out;
+}
+
+function normalizeForMatch(s) {
+  return (s || '').toLowerCase().replace(/[^\u0900-\u097Fa-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+const VOICE_PAY_WORDS = ['jama','jamaa','jma','collect','payment','pay','wasool','vasool','liya','diya','bharo','bhara','जमा','वसूल','भरो','भरा'];
+const VOICE_BAL_WORDS = ['balance','baki','bakaya','outstanding','kitna','kitni','batao','बैलेंस','बाकी','बकाया','कितना','कितनी','बताओ'];
+const VOICE_NUM_WORDS = {
+  'pachas':50,'pachaas':50,'पचास':50,
+  'ek sau':100,'sau':100,'ek so':100,'सौ':100,'एक सौ':100,
+  'do sau':200,'दो सौ':200,
+  'teen sau':300,'तीन सौ':300,
+  'char sau':400,'चार सौ':400,
+  'paanch sau':500,'panch sau':500,'पांच सौ':500,
+  'das sau':1000,'दस सौ':1000,
+  'ek hazar':1000,'ek hazaar':1000,'hazar':1000,'hazaar':1000,'एक हज़ार':1000,'एक हजार':1000,'हज़ार':1000,'हजार':1000,
+  'do hazar':2000,'do hazaar':2000,'दो हज़ार':2000,'दो हजार':2000,
+  'paanch hazar':5000,'paanch hazaar':5000,'पांच हज़ार':5000,'पांच हजार':5000,
+  'das hazar':10000,'das hazaar':10000,'दस हज़ार':10000,'दस हजार':10000
+};
+
+function extractVoiceAmount(text) {
+  const m = text.match(/\d+/);
+  if (m) return parseInt(m[0]);
+  const lower = text.toLowerCase();
+  for (const [word, val] of Object.entries(VOICE_NUM_WORDS)) {
+    if (lower.includes(word) || text.includes(word)) return val;
+  }
+  return null;
+}
+
+function matchClientsByVoice(spokenText) {
+  let cleaned = spokenText.toLowerCase();
+  [...VOICE_PAY_WORDS, ...VOICE_BAL_WORDS, 'ka','ki','ke','का','की','के','रुपये','रुपए','rupiye','rupaye','rupees','rs','₹'].forEach(w => {
+    cleaned = cleaned.split(w).join(' ');
+  });
+  cleaned = cleaned.replace(/\d+/g, ' ');
+  const norm = normalizeForMatch(cleaned);
+  const roman = normalizeForMatch(transliterateDevanagari(norm));
+  const words = [...new Set([...norm.split(' '), ...roman.split(' ')])].filter(w => w.length > 1);
+  if (!words.length) return [];
+
+  const scored = allClients.map(c => {
+    const cname = normalizeForMatch(c.name);
+    let score = 0;
+    words.forEach(w => { if (cname.includes(w)) score += w.length; });
+    return { client: c, score };
+  }).filter(x => x.score > 0).sort((a, b) => b.score - a.score);
+  return scored;
+}
+
+function handleVoiceCommand(text) {
+  const status = document.getElementById('voice-status');
+  const body = document.getElementById('voice-body');
+  status.innerHTML = `<div class="voice-transcript">"${text}"</div>`;
+
+  const lower = text.toLowerCase();
+
+  // Help mode: "passbook kaise use kare", "madad", "features batao"
+  const HELP_WORDS = ['kaise','कैसे','help','madad','मदद','sikha','सिखा','guide','गाइड','feature','फीचर','use kare','इस्तेमाल'];
+  if (HELP_WORDS.some(w => lower.includes(w) || text.includes(w))) {
+    const topicIdx = matchHelpTopic(text);
+    if (topicIdx >= 0) { showHelpTopic(topicIdx); return; }
+    renderHelpMenu();
+    speak('Yeh saare features hain. Kisi par tap karein ya feature ka naam lekar puchein.');
+    return;
+  }
+
+  const isBalanceQuery = VOICE_BAL_WORDS.some(w => lower.includes(w) || text.includes(w));
+  const amount = isBalanceQuery ? null : extractVoiceAmount(text);
+  const matches = matchClientsByVoice(text);
+
+  if (!matches.length) {
+    body.innerHTML = `<div style="text-align:center;color:var(--muted);padding:10px 0">
+      😕 Client samajh nahi paya.<br>Naam clearly bolen, jaise: <b>"Ramesh Yadav 500 jama karo"</b>
+      <div class="voice-confirm-row"><button class="voice-btn-no" onclick="closeVoiceSheet()">बंद करें</button></div>
+    </div>`;
+    return;
+  }
+
+  if (matches.length > 1 && matches[0].score === matches[1].score) {
+    // disambiguation needed
+    let html = `<div style="font-size:13px;color:var(--muted);margin-bottom:8px">Konsa client? / Which client?</div>`;
+    matches.slice(0, 5).forEach(m => {
+      html += `<div class="voice-client-pick" onclick="voiceResolveClient('${m.client.id}', ${amount || 'null'}, ${isBalanceQuery})">
+        <span>${m.client.name}</span><span style="color:var(--muted);font-size:12px">₹${fmt(parseFloat(m.client.balance)||0)}</span>
+      </div>`;
+    });
+    html += `<div class="voice-confirm-row"><button class="voice-btn-no" onclick="closeVoiceSheet()">Cancel</button></div>`;
+    body.innerHTML = html;
+    return;
+  }
+
+  voiceResolveClient(matches[0].client.id, amount, isBalanceQuery);
+}
+
+function voiceResolveClient(clientId, amount, isBalanceQuery) {
+  const c = allClients.find(x => x.id === clientId);
+  const body = document.getElementById('voice-body');
+  if (!c) { closeVoiceSheet(); return; }
+
+  if (isBalanceQuery || !amount) {
+    const totalDue = (parseFloat(c.balance)||0) + (parseFloat(c.interest_amount)||0);
+    const paid = currentLoanPayments(c)
+      .reduce((s,p) => s + (parseFloat(p.amount)||0), 0);
+    const outstanding = Math.max(0, totalDue - paid);
+
+    body.innerHTML = `
+      <div style="text-align:center;padding:6px 0 4px">
+        <div style="font-size:16px;font-weight:800;color:var(--navy)">${c.name}</div>
+        <div style="font-size:13px;color:var(--muted);margin:6px 0">Loan Balance / Outstanding</div>
+        <div style="font-size:26px;font-weight:800;color:${outstanding>0?'var(--danger)':'var(--success)'}">₹${fmt(outstanding)}</div>
+      </div>
+      <div class="voice-confirm-row">
+        <button class="voice-btn-no" onclick="closeVoiceSheet()">बंद करें</button>
+      </div>`;
+    speak(`${c.name} ka outstanding ${outstanding} rupaye hai`);
+    return;
+  }
+
+  // Payment confirmation
+  voicePendingPayment = { clientId: c.id, amount };
+  body.innerHTML = `
+    <div style="text-align:center;padding:6px 0 4px">
+      <div style="font-size:16px;font-weight:800;color:var(--navy)">${c.name}</div>
+      <div style="font-size:13px;color:var(--muted);margin:6px 0">Payment Confirm karein</div>
+      <div style="font-size:28px;font-weight:800;color:var(--success)">₹${fmt(amount)}</div>
+    </div>
+    <div class="voice-confirm-row">
+      <button class="voice-btn-no" onclick="closeVoiceSheet()">❌ Cancel</button>
+      <button class="voice-btn-yes" onclick="confirmVoicePayment()">✅ Confirm / जमा करें</button>
+    </div>`;
+  speak(`${c.name} ko ${amount} rupaye, confirm karein`);
+}
+
+async function confirmVoicePayment() {
+  if (!voicePendingPayment) return;
+  const { clientId, amount } = voicePendingPayment;
+  const cl = allClients.find(c => c.id === clientId);
+  const body = document.getElementById('voice-body');
+  body.innerHTML = `<div style="text-align:center;color:var(--muted);padding:14px 0">Saving...</div>`;
+
+  try {
+    const today = new Date().toISOString().slice(0,10);
+    const { data, error } = await db.from('payments').insert({
+      client_id: clientId,
+      amount: parseFloat(amount),
+      type: 'credit',
+      description: 'Voice Entry / आवाज़ से दर्ज',
+      date: today,
+      created_by: currentUser?.id || null
+    }).select().single();
+    if (error) throw error;
+
+    allPayments.unshift(data);
+    showToast(`✅ ₹${fmt(amount)} — ${cl?.name||''}`, 'success');
+    speak(`${cl?.name||''} ka ${amount} rupaye jama ho gaya`);
+    body.innerHTML = `<div style="text-align:center;color:var(--success);font-weight:700;padding:14px 0">✅ ${cl?.name||''} — ₹${fmt(amount)} जमा हो गया!</div>`;
+    voicePendingPayment = null;
+    await loadAll();
+    setTimeout(closeVoiceSheet, 1500);
+  } catch (err) {
+    console.error('Voice payment error:', err);
+    body.innerHTML = `<div style="text-align:center;color:var(--danger);padding:14px 0">⚠️ Save failed: ${err.message||'Try again'}</div>
+      <div class="voice-confirm-row"><button class="voice-btn-no" onclick="closeVoiceSheet()">बंद करें</button></div>`;
+  }
 }
 
 
@@ -2356,6 +3084,7 @@ async function loadCollReg() {
 }
 
 // Print fix: innerHTML me typed input values nahi aate (isi se 00 dikhta tha).
+// Yeh helper inputs ko unki live value ke text se replace karke print HTML deta hai.
 function getPrintableHTML(areaId) {
   const area = document.getElementById(areaId);
   if (!area) return '';
@@ -2382,7 +3111,6 @@ function printCashBook() {
   const html = `<!DOCTYPE html><html><head><title>Cash Book - ${date}</title>
   <style>body{font-family:Arial,sans-serif;margin:10mm}table{width:100%;border-collapse:collapse}
   th,td{border:1px solid #999;padding:6px;font-size:12px}th{background:#1a2e4a;color:white}
-  input{border:none;width:100%;text-align:right;font-size:12px}
   @media print{@page{margin:10mm}}</style></head><body>
   <h2 style="text-align:center;margin-bottom:4px">धन रक्षा Finance — Cash Book</h2>
   <p style="text-align:center;font-size:12px;margin-top:0">Day: <b>${day}</b> &nbsp; Date: <b>${date}</b></p>
@@ -2566,7 +3294,7 @@ function printCollReg() {
   const html = `<!DOCTYPE html><html><head><title>Collection Register - ${date}</title>
   <style>body{font-family:Arial,sans-serif;margin:8mm;font-size:11px}
   table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:5px;font-size:10px}
-  th{background:#1a2e4a;color:white}input{border:none;font-size:10px;width:100%}
+  th{background:#1a2e4a;color:white}
   button{display:none}@media print{@page{size:landscape;margin:8mm}}</style>
   </head><body>${getPrintableHTML('collreg-print-area')}</body></html>`;
   const w = window.open('','_blank');
@@ -2762,7 +3490,11 @@ function renderMeetingTab() {
       html += '<td style="padding:5px 4px;border:1px solid #ddd;text-align:center">0</td>';
       html += '<td style="padding:5px 4px;border:1px solid #ddd;text-align:right">'+fmt(pDue)+'</td>';
       html += '<td style="padding:5px 4px;border:1px solid #ddd;text-align:right">'+fmt(iDue)+'</td>';
-      html += '<td style="padding:5px 4px;border:1px solid #ddd;min-width:50px"></td>';
+      // CRM — aaj ki payment
+      const todayPayment = allPayments
+        .filter(p => p.client_id === cl.id && p.type === 'credit' && p.date === todayStr && !(p.description||'').includes('DELETED'))
+        .reduce((s,p) => s+(parseFloat(p.amount)||0), 0);
+      html += '<td style="padding:5px 4px;border:1px solid #ddd;text-align:right;font-weight:700;color:'+(todayPayment>0?'#16a34a':'#999')+'">'+(todayPayment>0?fmt(todayPayment):'—')+'</td>';
       html += '<td style="padding:5px 4px;border:1px solid #ddd;text-align:right;font-weight:700;color:green">'+fmt(emi)+'</td>';
       html += '<td style="padding:5px 4px;border:1px solid #ddd;text-align:center">'
         + (outstandingP > 0 ? '<button onclick="quickPay(\''+cl.id+'\','+emi+')" style="background:#22c55e;color:white;border:none;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">💳 Pay</button>' : '<span style="color:green;font-size:11px">✅ Done</span>')
@@ -3095,12 +3827,13 @@ function showNPAReport() {
     const expectedInstallments = Math.min(weeksElapsed, totalWeeks);
     if (expectedInstallments <= 0) return false;
 
-    // Real payments (reversal exclude)
-    const realPaid = allPayments
-      .filter(p => p.client_id === c.id && p.type === 'credit' && !(p.description||'').includes('Reversal') && !(p.description||'').includes('DELETED'))
+    // Real payments (reversal exclude) — current loan ke hi
+    const realPaid = currentLoanPayments(c)
+      .filter(p => !(p.description||'').includes('Reversal'))
       .reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+    const loanStartNpa = c.loan_date ? new Date(c.loan_date) : null;
     const debitReversals = allPayments
-      .filter(p => p.client_id === c.id && p.type === 'debit' && (p.description||'').includes('Reversal'))
+      .filter(p => p.client_id === c.id && p.type === 'debit' && (p.description||'').includes('Reversal') && (!loanStartNpa || !p.date || new Date(p.date) >= loanStartNpa))
       .reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
     const netPaid = Math.max(0, realPaid - debitReversals);
 
@@ -3331,7 +4064,8 @@ function renderTeamPage(c) {
             ${e.id === currentUser.id
               ? '<span style="font-size:10px;color:var(--gold);font-weight:700">👑 You</span>'
               : e.is_approved
-                ? '<span style="font-size:10px;color:var(--success);font-weight:700">✅ Approved</span>'
+                ? `<span style="font-size:10px;color:var(--success);font-weight:700">✅ Approved</span>
+                   <button onclick="deactivateEmployee('${e.id}','${(e.name||'').replace(/'/g,"\\'")}')" style="background:#ef4444;color:white;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer">🚫 Deactivate</button>`
                 : `<button onclick="openApproveModal('${e.id}','${e.name}','${e.email}')" style="background:#22c55e;color:white;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer">✅ Approve</button>`
             }
           </div>
@@ -3345,6 +4079,27 @@ function openApproveModal(id, name, email) {
   if (info) info.innerHTML = `<strong>${name}</strong><br><span style="color:var(--muted)">${email}</span>`;
   document.getElementById('approve-admin-pass').value = '';
   openModal('approve-modal');
+}
+
+// ── EMPLOYEE EXIT / DEACTIVATE ────────────
+async function deactivateEmployee(empId, empName) {
+  if (!confirm(`${empName} ko deactivate karein?\n\n• Login band ho jayega (data access turant block)\n• Unke saare clients aapko (admin) transfer ho jayenge\n\nConfirm?`)) return;
+
+  // 1. Access band karo
+  const { error: e1 } = await db.from('profiles')
+    .update({ is_approved: false })
+    .eq('id', empId);
+  if (e1) { showToast('Deactivate failed: ' + e1.message, 'error'); return; }
+
+  // 2. Unke clients admin ko reassign karo (taaki collection na ruke)
+  const { error: e2 } = await db.from('clients')
+    .update({ assigned_to: currentUser.id })
+    .eq('assigned_to', empId);
+  if (e2) { showToast('Clients reassign failed: ' + e2.message, 'error'); return; }
+
+  showToast(`${empName} deactivated ✅ Clients aapko transfer ho gaye.`, 'success');
+  await loadAll();
+  showPage('team');
 }
 
 async function approveEmployee() {
@@ -3472,7 +4227,7 @@ function showPassbook() {
     <div id="passbook-client-list">
       ${allClients.length === 0 ? emptyState('📒','No clients yet') :
         allClients.map(cl => {
-          const payments = allPayments.filter(p => p.client_id === cl.id && p.type === 'credit');
+          const payments = currentLoanPayments(cl);
           const totalPaid = payments.reduce((s,p) => s+(parseFloat(p.amount)||0), 0);
           const loan = parseFloat(cl.balance)||0;
           const outstanding = Math.max(0, loan - totalPaid);
@@ -3945,7 +4700,7 @@ function printMeetingSheet() {
         <td>0</td>
         <td>${fmt(pDue)}</td>
         <td>${fmt(iDue)}</td>
-        <td></td>
+        <td style="color:#16a34a;font-weight:700">${(() => { const tp = allPayments.filter(p=>p.client_id===cl.id&&p.type==='credit'&&p.date===todayStr&&!(p.description||'').includes('DELETED')).reduce((s,p)=>s+(parseFloat(p.amount)||0),0); return tp>0?fmt(tp):''; })()}</td>
         <td style="color:green;font-weight:bold">${fmt(emi)}</td>
         <td style="min-width:50px"></td>
       </tr>`;
@@ -4324,4 +5079,127 @@ async function deletePayment(paymentId) {
     console.error('Delete error:', err);
     showToast('Delete failed! Try again', 'error');
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HELP VOICE GUIDE — ek click me saare features, bolke sawal pucho
+// ═══════════════════════════════════════════════════════════════
+const HELP_TOPICS = [
+  { keys:['client','grahak','ग्राहक','add','jodna','जोड़','naya','नया','kyc'],
+    title:'👤 Client Add / ग्राहक जोड़ना',
+    steps:['नीचे "ग्राहक" tab दबाएं','"+ जोड़ें" button दबाएं','नाम, फोन भरें — फोन पर OTP verify करें','Aadhaar/PAN photo upload करें (बाद में भी कर सकते हैं)','Assign To में employee चुनें','Save दबाएं'],
+    speech:'Client jodne ke liye neeche grahak tab dabayen, phir plus jodein button. Naam aur phone bharen, OTP verify karen, aur Save daba den.' },
+  { keys:['payment','jama','जमा','wasool','वसूल','kisht','किस्त','emi','paisa','पैसा','entry'],
+    title:'💰 Payment Entry / किस्त जमा',
+    steps:['ग्राहक tab में client खोलें','"Payment" / जमा button दबाएं','Amount डालें और Save करें','या 🎤 mic button दबाकर बोलें: "Ramesh 500 jama karo"'],
+    speech:'Payment ke liye client kholen aur jama button dabayen. Ya neeche mic button dabakar bolen, jaise Ramesh paanch sau jama karo. Confirm dabate hi entry ho jayegi.' },
+  { keys:['mic','voice','awaaz','आवाज़','bolkar','बोल'],
+    title:'🎤 Voice Assistant / आवाज़ से काम',
+    steps:['नीचे-right 🎤 button दबाएं','बोलें: "[नाम] 500 jama karo" → payment','या बोलें: "[नाम] ka balance batao" → बकाया सुनें','Screen पर Confirm दबाने पर ही save होगा'],
+    speech:'Mic button dabakar client ka naam aur amount bolen, jaise Sunita paanch sau jama karo. Balance puchne ke liye bolen, Sunita ka balance batao.' },
+  { keys:['passbook','पासबुक','statement'],
+    title:'📖 Passbook',
+    steps:['More tab → Passbook चुनें','Client select करें','12-हफ्ते की entries दिखेंगी, cycle tabs (1st/2nd) से पुराने लोन देखें','Print button से print करें'],
+    speech:'More tab me passbook kholen, client chunen, aur poori kisht history dekhen ya print karen.' },
+  { keys:['cash','book','कैश','कैशबुक','रोकड़'],
+    title:'📒 Cash Book / कैश बुक',
+    steps:['More tab → Cash Book','दिन की opening, collection, खर्च भरें','नोट गिनती (denomination) भी डाल सकते हैं','Save दबाएं — data save रहेगा','Print से register print करें'],
+    speech:'More tab me cash book kholen, din ka hisaab bharen aur save karen. Print bhi kar sakte hain.' },
+  { keys:['collection','register','संग्रह','रजिस्टर'],
+    title:'📋 Collection Register',
+    steps:['More tab → Collection Reg','Center-wise collection भरें','Save करें, Print करें'],
+    speech:'More tab me collection register kholen, center ka collection bharen aur save karen.' },
+  { keys:['monthly','report','मासिक','रिपोर्ट','month'],
+    title:'📊 Monthly Report / मासिक रिपोर्ट',
+    steps:['More tab → Monthly Report','Month चुनें','कुल वसूली, नए लोन, employee-wise collection दिखेगा','Print भी कर सकते हैं'],
+    speech:'More tab me monthly report kholen. Mahina chunte hi poori wasooli aur employee wise hisaab dikh jayega.' },
+  { keys:['team','टीम','employee','कर्मचारी','approve','स्वीकृति','deactivate'],
+    title:'🏢 Team / कर्मचारी (Admin only)',
+    steps:['नीचे टीम tab (या More → Team)','नया employee signup करेगा → यहां Pending दिखेगा','Approve दबाएं, अपना admin password डालें','निकालने के लिए Deactivate दबाएं — उसके clients आपको transfer हो जाएंगे'],
+    speech:'Team tab me naye employee ko approve karen apna password daal kar. Deactivate dabane par uska access band ho jata hai.' },
+  { keys:['npa','overdue','बकाया','default'],
+    title:'⚠️ NPA / Overdue',
+    steps:['Dashboard पर NPA section देखें','जो clients किस्त नहीं भर रहे, वो list होंगे'],
+    speech:'Dashboard par NPA section me un clients ki list hai jinki kisht ruki hui hai.' },
+  { keys:['loan','card','कार्ड','print'],
+    title:'🖨️ Loan Card Print',
+    steps:['Client खोलें → Loan Card button','SATIN-style card print होगा'],
+    speech:'Client khol kar loan card button dabayen, card print ho jayega.' },
+  { keys:['search','khoj','खोज','dhundo','ढूंढ'],
+    title:'🔍 Client Search',
+    steps:['ग्राहक tab में ऊपर search box','नाम/फोन type करें या 🎤 से बोलें'],
+    speech:'Grahak tab me upar search box me naam type karen ya mic se bolen.' },
+];
+
+function openHelpAssistant() {
+  const overlay = document.getElementById('voice-overlay');
+  const status = document.getElementById('voice-status');
+  const body = document.getElementById('voice-body');
+  overlay.classList.add('show');
+  status.innerHTML = `<b style="color:var(--navy)">❓ App Guide / सहायता</b>`;
+
+  let html = `<div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:10px">
+    Feature par tap karein, ya 🎤 dabakar puchein — jaise <b>"passbook kaise kholen"</b></div>
+    <div class="voice-confirm-row" style="margin:0 0 12px">
+      <button class="voice-btn-yes" style="background:linear-gradient(145deg,#d97706,#92600a)" onclick="helpListen()">🎤 बोलकर पूछें</button>
+      <button class="voice-btn-no" onclick="speakAllFeatures()">🔊 सभी features सुनें</button>
+    </div>`;
+  HELP_TOPICS.forEach((t, i) => {
+    html += `<div class="voice-client-pick" onclick="showHelpTopic(${i})"><span>${t.title}</span><span style="color:var(--muted)">›</span></div>`;
+  });
+  html += `<div class="voice-confirm-row"><button class="voice-btn-no" onclick="window.speechSynthesis.cancel();closeVoiceSheet()">बंद करें</button></div>`;
+  body.innerHTML = html;
+}
+
+function speakAllFeatures() {
+  window.speechSynthesis.cancel();
+  const names = HELP_TOPICS.map(t => t.title.replace(/^[^\s]+\s/, '').split('/')[0].trim()).join(', ');
+  speak(`Is app me ye features hain: ${names}. Kisi bhi feature par tap karke ya mic dabakar pooch sakte hain.`);
+}
+
+function showHelpTopic(i) {
+  const t = HELP_TOPICS[i];
+  const body = document.getElementById('voice-body');
+  let html = `<div style="font-size:15px;font-weight:800;color:var(--navy);margin-bottom:10px">${t.title}</div><ol style="padding-left:20px;margin:0 0 10px">`;
+  t.steps.forEach(s => { html += `<li style="font-size:13px;margin-bottom:8px;color:var(--text)">${s}</li>`; });
+  html += `</ol>
+    <div class="voice-confirm-row">
+      <button class="voice-btn-no" onclick="window.speechSynthesis.cancel();openHelpAssistant()">‹ वापस</button>
+      <button class="voice-btn-yes" style="background:linear-gradient(145deg,#d97706,#92600a)" onclick="window.speechSynthesis.cancel();speak(HELP_TOPICS[${i}].speech)">🔊 सुनें</button>
+    </div>`;
+  body.innerHTML = html;
+  window.speechSynthesis.cancel();
+  speak(t.speech);
+}
+
+function helpListen() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) { showToast('Browser mic support nahi hai!', 'error'); return; }
+  window.speechSynthesis.cancel();
+  const status = document.getElementById('voice-status');
+  status.innerHTML = `<span style="color:var(--danger)">🔴 सुन रहे हैं... पूछिए</span>`;
+
+  const rec = new SpeechRecognition();
+  rec.lang = 'hi-IN';
+  rec.interimResults = false;
+  rec.onresult = (e) => {
+    const text = e.results[0][0].transcript.trim();
+    status.innerHTML = `<div class="voice-transcript">"${text}"</div>`;
+    const lower = text.toLowerCase();
+    const roman = transliterateDevanagari(lower);
+    let best = -1, bestScore = 0;
+    HELP_TOPICS.forEach((t, i) => {
+      let score = 0;
+      t.keys.forEach(k => { if (lower.includes(k) || roman.includes(k) || text.includes(k)) score += k.length; });
+      if (score > bestScore) { bestScore = score; best = i; }
+    });
+    if (best >= 0) showHelpTopic(best);
+    else {
+      speak('Maaf kijiye, samajh nahi aaya. Feature ka naam bolen, jaise passbook ya payment.');
+      document.getElementById('voice-body').insertAdjacentHTML('afterbegin',
+        `<div style="text-align:center;color:var(--danger);font-size:12px;margin-bottom:8px">😕 Samajh nahi aaya — feature ka naam bolen (jaise "passbook")</div>`);
+    }
+  };
+  rec.onerror = () => { status.innerHTML = `<span style="color:var(--danger)">Mic error — dobara try karein</span>`; };
+  rec.start();
 }
