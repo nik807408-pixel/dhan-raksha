@@ -195,6 +195,20 @@
       size: A4 landscape;
     }
   }
+    @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,.6)}70%{box-shadow:0 0 0 14px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
+    .voice-fab{position:fixed;bottom:78px;right:16px;width:58px;height:58px;border-radius:50%;background:linear-gradient(145deg,var(--navy2),var(--navy));color:#fff;border:none;font-size:24px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.25);z-index:200;cursor:pointer}
+    .voice-fab.listening{background:linear-gradient(145deg,#ef4444,#b91c1c);animation:pulse 1.2s infinite}
+    .voice-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;align-items:flex-end;justify-content:center}
+    .voice-overlay.show{display:flex}
+    .voice-sheet{background:#fff;width:100%;max-width:480px;border-radius:20px 20px 0 0;padding:20px;box-shadow:0 -8px 30px rgba(0,0,0,.25);max-height:70vh;overflow-y:auto}
+    .voice-status{text-align:center;font-size:14px;color:var(--muted);margin-bottom:10px}
+    .voice-transcript{background:var(--bg);border-radius:10px;padding:10px 14px;font-size:14px;color:var(--text);margin-bottom:14px;text-align:center}
+    .voice-client-pick{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1.5px solid var(--border);border-radius:12px;margin-bottom:8px;cursor:pointer}
+    .voice-client-pick:active{background:var(--bg)}
+    .voice-confirm-row{display:flex;gap:10px;margin-top:14px}
+    .voice-confirm-row button{flex:1;padding:14px;border-radius:12px;font-size:15px;font-weight:700;border:none;cursor:pointer}
+    .voice-btn-yes{background:var(--success);color:#fff}
+    .voice-btn-no{background:var(--bg);color:var(--text);border:1.5px solid var(--border) !important}
   </style>
 </head>
 <body>
@@ -224,7 +238,7 @@
           <rect width="52" height="52" rx="12" fill="url(#redgrad2)"/>
           <defs>
             <linearGradient id="redgrad2" x1="0" y1="0" x2="52" y2="52">
-              <stop offset="0%" stop-color="#ff1a1a"/>
+              <stop offset="0%" stop-color="#1a3a6b"/>
               <stop offset="100%" stop-color="#990000"/>
             </linearGradient>
           </defs>
@@ -272,7 +286,7 @@
 <!-- APP -->
 <div id="app">
   <div class="topbar">
-    <div class="topbar-logo" style="font-family:serif;font-size:16px;display:flex;align-items:center;gap:8px"><svg width="28" height="28" viewBox="0 0 52 52" fill="none"><rect width="52" height="52" rx="10" fill="url(#tg)"/><defs><linearGradient id="tg" x1="0" y1="0" x2="52" y2="52"><stop offset="0%" stop-color="#ff1a1a"/><stop offset="100%" stop-color="#880000"/></linearGradient></defs><text x="26" y="20" text-anchor="middle" font-family="serif" font-size="11" font-weight="700" fill="white" letter-spacing="1">धन</text><text x="26" y="34" text-anchor="middle" font-family="serif" font-size="11" font-weight="700" fill="#FFD700" letter-spacing="1">रक्षा</text><text x="26" y="46" text-anchor="middle" font-family="serif" font-size="8" fill="rgba(255,255,255,.7)">Finance</text></svg><span>धन <span style="color:#ff9900">रक्षा</span></span></div>
+    <div class="topbar-logo" style="font-family:serif;font-size:16px;display:flex;align-items:center;gap:8px"><svg width="28" height="28" viewBox="0 0 52 52" fill="none"><rect width="52" height="52" rx="10" fill="url(#tg)"/><defs><linearGradient id="tg" x1="0" y1="0" x2="52" y2="52"><stop offset="0%" stop-color="#1a3a6b"/><stop offset="100%" stop-color="#0f2547"/></linearGradient></defs><text x="26" y="20" text-anchor="middle" font-family="serif" font-size="11" font-weight="700" fill="white" letter-spacing="1">धन</text><text x="26" y="34" text-anchor="middle" font-family="serif" font-size="11" font-weight="700" fill="#FFD700" letter-spacing="1">रक्षा</text><text x="26" y="46" text-anchor="middle" font-family="serif" font-size="8" fill="rgba(255,255,255,.7)">Finance</text></svg><span>धन <span style="color:#ff9900">रक्षा</span></span></div>
     <div class="topbar-right">
       
       <div class="user-badge">
@@ -288,9 +302,23 @@
   <nav class="bottom-nav">
     <button class="nav-item active" id="nav-dashboard" onclick="showPage('dashboard')"><span class="nav-icon">📊</span><span>Dashboard</span></button>
     <button class="nav-item" id="nav-clients" onclick="showPage('clients')"><span class="nav-icon">👥</span><span>ग्राहक</span></button>
+    <button class="nav-item" id="nav-payments" onclick="showPage('payments')"><span class="nav-icon">💰</span><span>भुगतान</span></button>
     <button class="nav-item" id="nav-invoices" onclick="showPage('invoices')"><span class="nav-icon">☰</span><span>More</span></button>
     <button class="nav-item" id="nav-team" onclick="showPage('team')"><span class="nav-icon">🏢</span><span>टीम</span></button>
   </nav>
+
+  <button class="voice-fab" id="voice-fab" onclick="toggleVoiceAssistant()" title="Voice Assistant">🎤</button>
+  <button class="voice-fab" id="help-fab" style="bottom:146px;width:48px;height:48px;font-size:20px;background:linear-gradient(145deg,#d97706,#92600a)" onclick="openHelpAssistant()" title="Help / सहायता">❓</button>
+  <button class="voice-fab" id="help-fab" style="bottom:146px;width:48px;height:48px;font-size:20px;background:linear-gradient(145deg,#d97706,#92600a)" onclick="openHelpAssistant()" title="Help Guide">❓</button>
+</div>
+
+<!-- VOICE ASSISTANT SHEET -->
+<div class="voice-overlay" id="voice-overlay" onclick="if(event.target===this) closeVoiceSheet()">
+  <div class="voice-sheet">
+    <div class="modal-handle"></div>
+    <div class="voice-status" id="voice-status">🎤 बोलिए... / Speak now...</div>
+    <div id="voice-body"></div>
+  </div>
 </div>
 
 <!-- CLIENT FORM MODAL -->
@@ -319,10 +347,10 @@
     <!-- Personal Info -->
     <div class="form-section">
       <div class="form-section-title">👤 Personal Info / व्यक्तिगत जानकारी</div>
-      <div class="field"><label>Full Name * / पूरा नाम</label><input id="f-name" autocomplete="off" placeholder="ग्राहक का नाम"/></div>
+      <div class="field"><label>Full Name * / पूरा नाम</label><input id="f-name" placeholder="ग्राहक का नाम"/></div>
       <div class="field-row">
-        <div class="field"><label>Father's Name / पिता</label><input id="f-father" autocomplete="off" placeholder="पिता का नाम"/></div>
-        <div class="field"><label>Mother's Name / माता</label><input id="f-mother" autocomplete="off" placeholder="माता का नाम"/></div>
+        <div class="field"><label>Father's Name / पिता</label><input id="f-father" placeholder="पिता का नाम"/></div>
+        <div class="field"><label>Mother's Name / माता</label><input id="f-mother" placeholder="माता का नाम"/></div>
       </div>
       <div class="field"><label>Marital Status / वैवाहिक स्थिति</label>
         <select id="f-marital" onchange="toggleSpouseName()">
@@ -361,10 +389,10 @@
   <label>Phone / फोन * <span style="color:var(--success);font-size:11px">(+91 India auto)</span></label>
   <div style="display:flex;align-items:center;gap:8px">
     <div style="background:#f0f4f8;border:1.5px solid var(--border);border-radius:10px;padding:11px 12px;font-size:14px;font-weight:700;color:var(--navy);flex-shrink:0">🇮🇳 +91</div>
-    <input id="f-phone" autocomplete="off" placeholder="98765 43210" style="flex:1" type="tel" maxlength="10"/>
+    <input id="f-phone" placeholder="98765 43210" style="flex:1" type="tel" maxlength="10"/>
   </div>
 </div>
-        <div class="field"><label>Alt Phone / दूसरा</label><input id="f-phone2" autocomplete="off" placeholder="वैकल्पिक"/></div>
+        <div class="field"><label>Alt Phone / दूसरा</label><input id="f-phone2" placeholder="वैकल्पिक"/></div>
       </div>
 
       <!-- OTP Section -->
